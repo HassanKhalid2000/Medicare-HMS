@@ -17,7 +17,10 @@ import {
   FolderOpen,
   BarChart3,
   ClipboardList,
-  Stethoscope
+  Stethoscope,
+  AlertTriangle,
+  Bell,
+  FileCode
 } from 'lucide-react';
 
 import {
@@ -113,6 +116,24 @@ const navigation = {
       title: 'Medical Reports',
       url: '/medical-reports',
       icon: BarChart3,
+      roles: ['admin', 'doctor', 'nurse']
+    },
+    {
+      title: 'Allergies',
+      url: '/allergies',
+      icon: AlertTriangle,
+      roles: ['admin', 'doctor', 'nurse']
+    },
+    {
+      title: 'Medical Alerts',
+      url: '/medical-alerts',
+      icon: Bell,
+      roles: ['admin', 'doctor', 'nurse']
+    },
+    {
+      title: 'Templates',
+      url: '/templates',
+      icon: FileCode,
       roles: ['admin', 'doctor', 'nurse']
     },
     {
