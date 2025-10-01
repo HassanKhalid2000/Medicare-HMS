@@ -1,4 +1,4 @@
-import { apiClient } from './base';
+import api from './base';
 
 export enum AlertSeverity {
   LOW = 'LOW',
@@ -79,7 +79,7 @@ export interface AlertStatistics {
 
 export const medicalAlertsApi = {
   getAll: async (params?: MedicalAlertQueryParams) => {
-    const response = await apiClient.get<{
+    const response = await api.get<{
       data: MedicalAlert[];
       total: number;
       page: number;
@@ -90,52 +90,52 @@ export const medicalAlertsApi = {
   },
 
   getById: async (id: string) => {
-    const response = await apiClient.get<MedicalAlert>(`/medical-alerts/${id}`);
+    const response = await api.get<MedicalAlert>(`/medical-alerts/${id}`);
     return response.data;
   },
 
   getByPatient: async (patientId: string) => {
-    const response = await apiClient.get<MedicalAlert[]>(
+    const response = await api.get<MedicalAlert[]>(
       `/medical-alerts/patient/${patientId}`
     );
     return response.data;
   },
 
   getCritical: async () => {
-    const response = await apiClient.get<MedicalAlert[]>('/medical-alerts/critical');
+    const response = await api.get<MedicalAlert[]>('/medical-alerts/critical');
     return response.data;
   },
 
   getStatistics: async () => {
-    const response = await apiClient.get<AlertStatistics>('/medical-alerts/statistics');
+    const response = await api.get<AlertStatistics>('/medical-alerts/statistics');
     return response.data;
   },
 
   create: async (data: CreateMedicalAlertDto) => {
-    const response = await apiClient.post<MedicalAlert>('/medical-alerts', data);
+    const response = await api.post<MedicalAlert>('/medical-alerts', data);
     return response.data;
   },
 
   update: async (id: string, data: UpdateMedicalAlertDto) => {
-    const response = await apiClient.patch<MedicalAlert>(`/medical-alerts/${id}`, data);
+    const response = await api.patch<MedicalAlert>(`/medical-alerts/${id}`, data);
     return response.data;
   },
 
   acknowledge: async (id: string) => {
-    const response = await apiClient.patch<MedicalAlert>(
+    const response = await api.patch<MedicalAlert>(
       `/medical-alerts/${id}/acknowledge`
     );
     return response.data;
   },
 
   deactivate: async (id: string) => {
-    const response = await apiClient.patch<MedicalAlert>(
+    const response = await api.patch<MedicalAlert>(
       `/medical-alerts/${id}/deactivate`
     );
     return response.data;
   },
 
   delete: async (id: string) => {
-    await apiClient.delete(`/medical-alerts/${id}`);
+    await api.delete(`/medical-alerts/${id}`);
   },
 };

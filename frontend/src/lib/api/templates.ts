@@ -1,4 +1,4 @@
-import { apiClient } from './base';
+import api from './base';
 
 export enum MedicalTemplateCategory {
   PRESCRIPTION = 'PRESCRIPTION',
@@ -63,7 +63,7 @@ export interface TemplateQueryParams {
 
 export const templatesApi = {
   getAll: async (params?: TemplateQueryParams) => {
-    const response = await apiClient.get<{
+    const response = await api.get<{
       data: MedicalTemplate[];
       total: number;
       page: number;
@@ -74,33 +74,33 @@ export const templatesApi = {
   },
 
   getById: async (id: string) => {
-    const response = await apiClient.get<MedicalTemplate>(`/templates/${id}`);
+    const response = await api.get<MedicalTemplate>(`/templates/${id}`);
     return response.data;
   },
 
   getByCategory: async (category: MedicalTemplateCategory) => {
-    const response = await apiClient.get<MedicalTemplate[]>(
+    const response = await api.get<MedicalTemplate[]>(
       `/templates/categories/${category}`
     );
     return response.data;
   },
 
   getSystemTemplates: async () => {
-    const response = await apiClient.get<MedicalTemplate[]>('/templates/system');
+    const response = await api.get<MedicalTemplate[]>('/templates/system');
     return response.data;
   },
 
   create: async (data: CreateTemplateDto) => {
-    const response = await apiClient.post<MedicalTemplate>('/templates', data);
+    const response = await api.post<MedicalTemplate>('/templates', data);
     return response.data;
   },
 
   update: async (id: string, data: UpdateTemplateDto) => {
-    const response = await apiClient.patch<MedicalTemplate>(`/templates/${id}`, data);
+    const response = await api.patch<MedicalTemplate>(`/templates/${id}`, data);
     return response.data;
   },
 
   delete: async (id: string) => {
-    await apiClient.delete(`/templates/${id}`);
+    await api.delete(`/templates/${id}`);
   },
 };
