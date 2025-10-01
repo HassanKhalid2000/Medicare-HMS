@@ -14,15 +14,10 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { MedicalRecordsModule } from './modules/medical-records/medical-records.module';
 import { DiagnosesModule } from './modules/diagnoses/diagnoses.module';
 import { PrescriptionsModule } from './modules/prescriptions/prescriptions.module';
-import { TemplatesModule } from './modules/templates/templates.module';
 // import { LabResultsModule } from './modules/lab-results/lab-results.module';
 import { AdmissionsModule } from './modules/admissions/admissions.module';
-import { VitalSignsModule } from './modules/vital-signs/vital-signs.module';
-import { MedicalDocumentsModule } from './modules/medical-documents/medical-documents.module';
 import { TimelineModule } from './modules/timeline/timeline.module';
 import { MedicalReportsModule } from './modules/medical-reports/medical-reports.module';
-import { MedicalAlertsModule } from './modules/medical-alerts/medical-alerts.module';
-// import { AllergiesModule } from './modules/allergies/allergies.module';
 
 @Module({
   imports: [
@@ -50,15 +45,10 @@ import { MedicalAlertsModule } from './modules/medical-alerts/medical-alerts.mod
     MedicalRecordsModule,
     DiagnosesModule,
     PrescriptionsModule,
-    TemplatesModule,
     // LabResultsModule,
     AdmissionsModule,
-    VitalSignsModule,
-    MedicalDocumentsModule,
     TimelineModule,
     MedicalReportsModule,
-    MedicalAlertsModule,
-    // AllergiesModule,  // Temporarily disabled to fix diagnoses module
   ],
 })
 export class AppModule {}

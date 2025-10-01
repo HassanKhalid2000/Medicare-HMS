@@ -12,15 +12,9 @@ import {
   Settings,
   ChevronUp,
   User2,
-  FileText,
-  Activity,
-  FolderOpen,
   BarChart3,
   ClipboardList,
-  Stethoscope,
-  AlertTriangle,
-  Bell,
-  FileCode
+  Stethoscope
 } from 'lucide-react';
 
 import {
@@ -101,39 +95,9 @@ const navigation = {
       roles: ['admin', 'doctor', 'nurse']
     },
     {
-      title: 'Vital Signs',
-      url: '/vital-signs',
-      icon: Activity,
-      roles: ['admin', 'doctor', 'nurse']
-    },
-    {
-      title: 'Medical Documents',
-      url: '/medical-documents',
-      icon: FolderOpen,
-      roles: ['admin', 'doctor', 'nurse']
-    },
-    {
       title: 'Medical Reports',
       url: '/medical-reports',
       icon: BarChart3,
-      roles: ['admin', 'doctor', 'nurse']
-    },
-    {
-      title: 'Allergies',
-      url: '/allergies',
-      icon: AlertTriangle,
-      roles: ['admin', 'doctor', 'nurse']
-    },
-    {
-      title: 'Medical Alerts',
-      url: '/medical-alerts',
-      icon: Bell,
-      roles: ['admin', 'doctor', 'nurse']
-    },
-    {
-      title: 'Templates',
-      url: '/templates',
-      icon: FileCode,
       roles: ['admin', 'doctor', 'nurse']
     },
     {

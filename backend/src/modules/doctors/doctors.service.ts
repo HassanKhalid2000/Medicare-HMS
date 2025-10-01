@@ -54,7 +54,8 @@ export class DoctorsService {
         ]
       }),
       ...(specialization && { specialization }),
-      ...(status && { status })
+      // Only show active doctors by default, unless status is explicitly specified
+      status: status || 'active'
     };
 
     const orderBy: Prisma.DoctorOrderByWithRelationInput = {
@@ -182,20 +183,22 @@ export class DoctorsService {
     // Check if doctor exists
     await this.findOne(id);
 
-    // Check if doctor has active appointments
-    const activeAppointments = await this.prisma.appointment.count({
-      where: {
-        doctorId: id,
-        status: {
-          in: ['scheduled', 'confirmed']
-        }
-      }
-    });
+    // Check for any related records
+    const [appointments, admissions, medicalRecords] = await Promise.all([
+      this.prisma.appointment.count({ where: { doctorId: id } }),
+      this.prisma.admission.count({ where: { doctorId: id } }),
+      this.prisma.medicalRecord.count({ where: { doctorId: id } }),
+    ]);
 
-    if (activeAppointments > 0) {
-      throw new ConflictException('Cannot delete doctor with active appointments');
+    // If doctor has ANY related records, use soft delete instead
+    if (appointments > 0 || admissions > 0 || medicalRecords > 0) {
+      return this.prisma.doctor.update({
+        where: { id },
+        data: { status: 'inactive' }
+      });
     }
 
+    // Only hard delete if no related records exist
     return this.prisma.doctor.delete({
       where: { id }
     });

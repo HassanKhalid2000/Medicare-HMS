@@ -267,9 +267,9 @@ export class PrescriptionsService {
     const medicines = await this.prisma.medicine.findMany({
       where: {
         OR: [
-          { name: { contains: searchTerm, mode: 'insensitive' } },
-          { category: { contains: searchTerm, mode: 'insensitive' } },
-          { manufacturer: { contains: searchTerm, mode: 'insensitive' } },
+          { name: { contains: searchTerm } },
+          { category: { contains: searchTerm } },
+          { manufacturer: { contains: searchTerm } },
         ],
       },
       take: limit,

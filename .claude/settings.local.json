@@ -45,7 +45,18 @@
       "Bash(git rm:*)",
       "Bash(rm:*)",
       "Bash(git log:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(PORT=3000 npm run dev)",
+      "Bash(open http://localhost:3000/allergies)",
+      "Bash(open http://localhost:3000/medical-alerts)",
+      "Bash(open http://localhost:3000/templates)",
+      "Bash(export:*)",
+      "Bash(chmod:*)",
+      "Bash(/tmp/test_modules.sh:*)",
+      "Bash(python3:*)",
+      "Bash(open http://localhost:3000/appointments)",
+      "Bash(open http://localhost:3000/patients)",
+      "Bash(open http://localhost:3000/doctors)"
     ],
     "deny": [],
     "ask": []

@@ -73,7 +73,14 @@ export const patientsApi = {
     if (params?.bloodType) searchParams.append('bloodType', params.bloodType);
 
     const response = await api.get(`/patients?${searchParams.toString()}`);
-    return response.data;
+    // Backend returns { success, data, meta } - transform to match PatientResponse interface
+    return {
+      data: response.data.data,
+      total: response.data.meta.total,
+      page: response.data.meta.page,
+      limit: response.data.meta.limit,
+      totalPages: response.data.meta.totalPages,
+    };
   },
 
   // Get patient by ID

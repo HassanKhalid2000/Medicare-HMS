@@ -79,6 +79,6 @@ export const appointmentsService = {
         available: boolean;
         appointmentId?: string;
       }>;
-    }>(`/appointments/available-slots/${doctorId}?date=${date}`);
+    }>(`/appointments/available-slots/${doctorId}/${date}`);
   },
 };

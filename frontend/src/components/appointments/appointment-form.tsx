@@ -184,10 +184,18 @@ export function AppointmentForm({
     try {
       setIsSubmitting(true);
 
+      // Format date without timezone conversion
+      const formatDateForAPI = (date: Date): string => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
       const submitData: CreateAppointmentData | UpdateAppointmentData = {
         patientId: values.patientId,
         doctorId: values.doctorId,
-        appointmentDate: values.appointmentDate.toISOString().split('T')[0], // Convert Date to "YYYY-MM-DD"
+        appointmentDate: formatDateForAPI(values.appointmentDate), // Convert Date to "YYYY-MM-DD" without timezone issues
         appointmentTime: values.appointmentTime, // Keep as time string format "HH:MM"
         duration: values.duration,
         type: values.type,
@@ -217,7 +225,7 @@ export function AppointmentForm({
           const { appointmentsService } = await import('@/services/appointments');
           const dateString = watchedDate.toISOString().split('T')[0]; // Convert to YYYY-MM-DD
           const response = await appointmentsService.getAvailableTimeSlots(watchedDoctor, dateString);
-          setAvailableTimeSlots(response.slots);
+          setAvailableTimeSlots(response || []);
         } catch (error) {
           console.error('Failed to load time slots:', error);
           // Fallback to empty slots or default slots

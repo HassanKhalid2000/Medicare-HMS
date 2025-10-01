@@ -59,16 +59,15 @@ export class PatientsService {
 
       if (search) {
         where.OR = [
-          { firstName: { contains: search, mode: 'insensitive' } },
-          { lastName: { contains: search, mode: 'insensitive' } },
-          { patientId: { contains: search, mode: 'insensitive' } },
-          { phone: { contains: search, mode: 'insensitive' } },
+          { firstName: { contains: search } },
+          { lastName: { contains: search } },
+          { patientId: { contains: search } },
+          { phone: { contains: search } },
         ];
       }
 
-      if (status) {
-        where.status = status;
-      }
+      // Only show active patients by default, unless status is explicitly specified
+      where.status = status || 'active';
 
       if (gender) {
         where.gender = gender;
