@@ -142,6 +142,25 @@ enum TestStatus {
   processing
   completed
   cancelled
+  failed
+  on_hold
+}
+
+enum LabResultStatus {
+  pending
+  normal
+  abnormal
+  critical
+  reviewed
+}
+
+enum LabResultInterpretation {
+  normal
+  high
+  low
+  critical_high
+  critical_low
+  abnormal
 }
 
 // Models
@@ -158,6 +177,24 @@ model User {
   lastLogin   DateTime?  @map("last_login")
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  createdTemplates      MedicalTemplate[]       @relation()
+  completedTemplates    MedicalTemplateInstance[] @relation("CompletedTemplates")
+  modifiedTemplates     MedicalTemplateInstance[] @relation("ModifiedTemplates")
+  requestedReports      MedicalReport[]         @relation("RequestedReports")
+  generatedReports      MedicalReport[]         @relation("GeneratedReports")
+  createdReportTemplates ReportTemplate[]       @relation()
+
+  // Treatment Plan Relations
+  createdTreatmentPlans TreatmentPlan[]         @relation("TreatmentPlanCreatedBy")
+  updatedTreatmentPlans TreatmentPlan[]         @relation("TreatmentPlanUpdatedBy")
+  assignedGoals         TreatmentGoal[]         @relation("TreatmentGoalAssignedTo")
+  createdGoals          TreatmentGoal[]         @relation("TreatmentGoalCreatedBy")
+  assignedTasks         TreatmentTask[]         @relation("TreatmentTaskAssignedTo")
+  createdTasks          TreatmentTask[]         @relation("TreatmentTaskCreatedBy")
+  recordedProgress      TreatmentProgress[]     @relation("TreatmentProgressRecordedBy")
+  conductedReviews      TreatmentReview[]       @relation("TreatmentReviewReviewedBy")
 
   @@index([email])
   @@index([employeeId])
@@ -194,6 +231,8 @@ model Patient {
   medicalAlerts   MedicalAlert[]
   allergies       Allergy[]
   immunizations   Immunization[]
+  templateInstances MedicalTemplateInstance[]
+  treatmentPlans  TreatmentPlan[]
 
   @@index([patientId])
   @@index([firstName, lastName])
@@ -222,6 +261,7 @@ model Doctor {
   admissions     Admission[]
   labTests       LabTest[]
   medicalRecords MedicalRecord[]
+  treatmentPlans TreatmentPlan[]
 
   @@index([doctorId])
   @@index([specialization])
@@ -385,12 +425,150 @@ model LabTest {
   // Relations
   patient Patient @relation(fields: [patientId], references: [id])
   doctor  Doctor  @relation(fields: [doctorId], references: [id])
+  labResults LabResult[]
+  labPanels  LabTestPanel[]
 
   @@index([testNumber])
   @@index([testType])
   @@index([status])
   @@index([urgency])
   @@map("lab_tests")
+}
+
+// Lab Panels for grouping related tests
+model LabPanel {
+  id              String        @id @default(uuid())
+  name            String        @db.VarChar(255)
+  description     String?       @db.Text
+  category        String        @db.VarChar(100)
+  isActive        Boolean       @default(true) @map("is_active")
+  cost            Decimal?      @db.Decimal(10, 2)
+  turnaroundTime  Int?          @map("turnaround_time") // in hours
+  instructions    String?       @db.Text
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  testPanels      LabTestPanel[]
+  panelTests      LabPanelTest[]
+
+  @@index([category])
+  @@index([isActive])
+  @@map("lab_panels")
+}
+
+// Junction table for tests and panels
+model LabTestPanel {
+  id        String   @id @default(uuid())
+  labTestId String   @map("lab_test_id")
+  panelId   String   @map("panel_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  labTest LabTest  @relation(fields: [labTestId], references: [id])
+  panel   LabPanel @relation(fields: [panelId], references: [id])
+
+  @@unique([labTestId, panelId])
+  @@map("lab_test_panels")
+}
+
+// Individual lab parameters that can be part of panels
+model LabParameter {
+  id              String   @id @default(uuid())
+  code            String   @unique @db.VarChar(20)
+  name            String   @db.VarChar(255)
+  description     String?  @db.Text
+  unit            String   @db.VarChar(50)
+  normalRangeMin  Decimal? @map("normal_range_min") @db.Decimal(10, 4)
+  normalRangeMax  Decimal? @map("normal_range_max") @db.Decimal(10, 4)
+  criticalMin     Decimal? @map("critical_min") @db.Decimal(10, 4)
+  criticalMax     Decimal? @map("critical_max") @db.Decimal(10, 4)
+  category        String   @db.VarChar(100)
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  panelTests LabPanelTest[]
+  results    LabResult[]
+
+  @@index([code])
+  @@index([category])
+  @@index([isActive])
+  @@map("lab_parameters")
+}
+
+// Junction table for panels and parameters
+model LabPanelTest {
+  id          String   @id @default(uuid())
+  panelId     String   @map("panel_id")
+  parameterId String   @map("parameter_id")
+  isRequired  Boolean  @default(true) @map("is_required")
+  displayOrder Int?    @map("display_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  panel     LabPanel     @relation(fields: [panelId], references: [id])
+  parameter LabParameter @relation(fields: [parameterId], references: [id])
+
+  @@unique([panelId, parameterId])
+  @@map("lab_panel_tests")
+}
+
+// Individual lab result values
+model LabResult {
+  id               String                  @id @default(uuid())
+  labTestId        String                  @map("lab_test_id")
+  parameterId      String                  @map("parameter_id")
+  value            String                  @db.VarChar(255)
+  numericValue     Decimal?                @map("numeric_value") @db.Decimal(15, 6)
+  unit             String                  @db.VarChar(50)
+  referenceRange   String?                 @map("reference_range") @db.VarChar(100)
+  status           LabResultStatus         @default(pending)
+  interpretation   LabResultInterpretation @default(normal)
+  flags            String?                 @db.VarChar(100) // H, L, HH, LL, etc.
+  notes            String?                 @db.Text
+  verifiedBy       String?                 @map("verified_by") @db.VarChar(255)
+  verifiedAt       DateTime?               @map("verified_at")
+  isAbnormal       Boolean                 @default(false) @map("is_abnormal")
+  isCritical       Boolean                 @default(false) @map("is_critical")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+
+  // Relations
+  labTest   LabTest      @relation(fields: [labTestId], references: [id])
+  parameter LabParameter @relation(fields: [parameterId], references: [id])
+
+  @@index([labTestId])
+  @@index([parameterId])
+  @@index([status])
+  @@index([interpretation])
+  @@index([isAbnormal])
+  @@index([isCritical])
+  @@map("lab_results")
+}
+
+// Reference ranges by demographics
+model LabReferenceRange {
+  id              String   @id @default(uuid())
+  parameterId     String   @map("parameter_id")
+  gender          Gender?
+  ageMin          Int?     @map("age_min")
+  ageMax          Int?     @map("age_max")
+  normalMin       Decimal  @map("normal_min") @db.Decimal(10, 4)
+  normalMax       Decimal  @map("normal_max") @db.Decimal(10, 4)
+  criticalMin     Decimal? @map("critical_min") @db.Decimal(10, 4)
+  criticalMax     Decimal? @map("critical_max") @db.Decimal(10, 4)
+  unit            String   @db.VarChar(50)
+  condition       String?  @db.VarChar(255) // pregnancy, etc.
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([parameterId])
+  @@index([gender])
+  @@index([ageMin, ageMax])
+  @@map("lab_reference_ranges")
 }
 
 // EMR-specific enums
@@ -454,6 +632,35 @@ enum ImmunizationStatus {
   CONTRAINDICATED
 }
 
+enum MedicalTemplateCategory {
+  VISIT_NOTES
+  REPORTS
+  FORMS
+  ASSESSMENTS
+  DISCHARGE_SUMMARIES
+  OPERATIVE_NOTES
+  CONSULTATION_NOTES
+  PROGRESS_NOTES
+  CUSTOM
+}
+
+enum MedicalTemplateType {
+  STRUCTURED_FORM
+  FREE_TEXT
+  CHECKLIST
+  QUESTIONNAIRE
+  CLINICAL_PATHWAY
+}
+
+enum TemplateInstanceStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  REVIEWED
+  SIGNED
+  ARCHIVED
+}
+
 // EMR Core Models
 model MedicalRecord {
   id              String            @id @default(uuid())
@@ -481,6 +688,7 @@ model MedicalRecord {
   vitalSigns  VitalSign[]
   prescriptions MedicalPrescription[]
   documents   MedicalDocument[]
+  templateInstances MedicalTemplateInstance[]
 
   @@index([patientId])
   @@index([doctorId])
@@ -686,6 +894,66 @@ model Immunization {
   @@map("immunizations")
 }
 
+// Medical template system for standardized notes and reports
+model MedicalTemplate {
+  id                String                @id @default(uuid())
+  name              String                @db.VarChar(200)
+  description       String?               @db.Text
+  category          MedicalTemplateCategory
+  templateType      MedicalTemplateType
+  content           Json                  // Template structure with fields
+  isActive          Boolean               @default(true) @map("is_active")
+  isSystem          Boolean               @default(false) @map("is_system") // System vs user-created
+  createdBy         String?               @map("created_by")
+  departmentId      String?               @map("department_id")
+  specialization    String?               @db.VarChar(100)
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+
+  // Relations
+  templateInstances MedicalTemplateInstance[]
+  createdByUser     User?                 @relation(fields: [createdBy], references: [id])
+
+  @@index([category])
+  @@index([templateType])
+  @@index([isActive])
+  @@index([createdBy])
+  @@index([specialization])
+  @@map("medical_templates")
+}
+
+// Instances of templates filled out for specific patients
+model MedicalTemplateInstance {
+  id               String          @id @default(uuid())
+  templateId       String          @map("template_id")
+  patientId        String          @map("patient_id")
+  medicalRecordId  String?         @map("medical_record_id")
+  filledData       Json            // Filled template data
+  completedBy      String          @map("completed_by")
+  completedAt      DateTime        @default(now()) @map("completed_at")
+  lastModifiedBy   String?         @map("last_modified_by")
+  lastModifiedAt   DateTime?       @map("last_modified_at")
+  status           TemplateInstanceStatus @default(DRAFT)
+  notes            String?         @db.Text
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  template         MedicalTemplate @relation(fields: [templateId], references: [id])
+  patient          Patient         @relation(fields: [patientId], references: [id])
+  medicalRecord    MedicalRecord?  @relation(fields: [medicalRecordId], references: [id])
+  completedByUser  User            @relation("CompletedTemplates", fields: [completedBy], references: [id])
+  lastModifiedByUser User?         @relation("ModifiedTemplates", fields: [lastModifiedBy], references: [id])
+
+  @@index([templateId])
+  @@index([patientId])
+  @@index([medicalRecordId])
+  @@index([completedBy])
+  @@index([status])
+  @@index([completedAt])
+  @@map("medical_template_instances")
+}
+
 // Audit log for tracking all system activities
 model AuditLog {
   id        String   @id @default(uuid())
@@ -704,4 +972,389 @@ model AuditLog {
   @@index([entity])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+enum ReportType {
+  PATIENT_SUMMARY
+  MEDICAL_HISTORY
+  PRESCRIPTION_REPORT
+  VITAL_SIGNS_REPORT
+  LAB_RESULTS_REPORT
+  ADMISSION_REPORT
+  FINANCIAL_REPORT
+  APPOINTMENT_REPORT
+  DIAGNOSIS_REPORT
+  CUSTOM_REPORT
+}
+
+enum ReportStatus {
+  PENDING
+  GENERATING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ReportFormat {
+  PDF
+  CSV
+  EXCEL
+  JSON
+}
+
+// Medical Reports
+model MedicalReport {
+  id              String       @id @default(uuid())
+  title           String       @db.VarChar(255)
+  description     String?      @db.Text
+  type            ReportType
+  format          ReportFormat @default(PDF)
+  status          ReportStatus @default(PENDING)
+
+  // Report parameters and filters
+  parameters      Json?        // Flexible JSON to store report parameters
+  filters         Json?        // Date ranges, patient filters, etc.
+
+  // File information
+  filePath        String?      @map("file_path") @db.VarChar(500)
+  fileName        String?      @map("file_name") @db.VarChar(255)
+  fileSize        Int?         @map("file_size")
+
+  // User information
+  requestedBy     String       @map("requested_by")
+  generatedBy     String?      @map("generated_by")
+
+  // Timestamps
+  requestedAt     DateTime     @default(now()) @map("requested_at")
+  startedAt       DateTime?    @map("started_at")
+  completedAt     DateTime?    @map("completed_at")
+  expiresAt       DateTime?    @map("expires_at")
+
+  // Error handling
+  errorMessage    String?      @map("error_message") @db.Text
+  retryCount      Int          @default(0) @map("retry_count")
+
+  // Metadata
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  requestedByUser User         @relation("RequestedReports", fields: [requestedBy], references: [id])
+  generatedByUser User?        @relation("GeneratedReports", fields: [generatedBy], references: [id])
+
+  @@index([type])
+  @@index([status])
+  @@index([requestedBy])
+  @@index([requestedAt])
+  @@index([expiresAt])
+  @@map("medical_reports")
+}
+
+// Report Templates for standardized reports
+model ReportTemplate {
+  id              String       @id @default(uuid())
+  name            String       @db.VarChar(255)
+  description     String?      @db.Text
+  type            ReportType
+  defaultFormat   ReportFormat @default(PDF)
+
+  // Template configuration
+  templateConfig  Json         // Report structure, fields, formatting
+  defaultParams   Json?        // Default parameters
+
+  // Access control
+  isPublic        Boolean      @default(false) @map("is_public")
+  createdBy       String       @map("created_by")
+
+  // Status
+  isActive        Boolean      @default(true) @map("is_active")
+
+  // Metadata
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  createdByUser   User         @relation(fields: [createdBy], references: [id])
+
+  @@index([type])
+  @@index([isPublic])
+  @@index([isActive])
+  @@index([createdBy])
+  @@map("report_templates")
+}
+
+// Treatment Plan Management System
+enum TreatmentPlanStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  CANCELLED
+  DRAFT
+}
+
+enum TreatmentGoalStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  ACHIEVED
+  PARTIALLY_ACHIEVED
+  NOT_ACHIEVED
+  DISCONTINUED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+  CANCELLED
+}
+
+model TreatmentPlan {
+  id              String               @id @default(uuid())
+
+  // Basic information
+  title           String               @db.VarChar(255)
+  description     String?              @db.Text
+  diagnosis       String               @db.VarChar(500)
+
+  // Dates
+  startDate       DateTime             @map("start_date")
+  endDate         DateTime?            @map("end_date")
+  reviewDate      DateTime?            @map("review_date")
+
+  // Status and priority
+  status          TreatmentPlanStatus  @default(ACTIVE)
+  priority        TaskPriority         @default(MEDIUM)
+
+  // Progress tracking
+  overallProgress Int                  @default(0) @map("overall_progress") // 0-100%
+
+  // Notes and observations
+  notes           String?              @db.Text
+  objectives      Json?                // Array of treatment objectives
+
+  // Relations
+  patientId       String               @map("patient_id")
+  doctorId        String               @map("doctor_id")
+  createdBy       String               @map("created_by")
+  updatedBy       String?              @map("updated_by")
+
+  // Metadata
+  isActive        Boolean              @default(true) @map("is_active")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  // Relations
+  patient         Patient              @relation(fields: [patientId], references: [id])
+  doctor          Doctor               @relation(fields: [doctorId], references: [id])
+  createdByUser   User                 @relation("TreatmentPlanCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser   User?                @relation("TreatmentPlanUpdatedBy", fields: [updatedBy], references: [id])
+
+  // Child relations
+  goals           TreatmentGoal[]
+  tasks           TreatmentTask[]
+  progress        TreatmentProgress[]
+  reviews         TreatmentReview[]
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([status])
+  @@index([startDate])
+  @@index([isActive])
+  @@map("treatment_plans")
+}
+
+model TreatmentGoal {
+  id              String               @id @default(uuid())
+
+  // Goal details
+  title           String               @db.VarChar(255)
+  description     String?              @db.Text
+  targetValue     String?              @map("target_value") @db.VarChar(255)
+  currentValue    String?              @map("current_value") @db.VarChar(255)
+  unit            String?              @db.VarChar(50)
+
+  // Dates
+  targetDate      DateTime?            @map("target_date")
+  achievedDate    DateTime?            @map("achieved_date")
+
+  // Status and progress
+  status          TreatmentGoalStatus  @default(NOT_STARTED)
+  progress        Int                  @default(0) // 0-100%
+  priority        TaskPriority         @default(MEDIUM)
+
+  // Notes
+  notes           String?              @db.Text
+
+  // Relations
+  treatmentPlanId String               @map("treatment_plan_id")
+  assignedTo      String?              @map("assigned_to")
+  createdBy       String               @map("created_by")
+
+  // Metadata
+  isActive        Boolean              @default(true) @map("is_active")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  // Relations
+  treatmentPlan   TreatmentPlan        @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  assignedToUser  User?                @relation("TreatmentGoalAssignedTo", fields: [assignedTo], references: [id])
+  createdByUser   User                 @relation("TreatmentGoalCreatedBy", fields: [createdBy], references: [id])
+
+  // Child relations
+  tasks           TreatmentTask[]
+  progressEntries TreatmentProgress[]
+
+  @@index([treatmentPlanId])
+  @@index([status])
+  @@index([targetDate])
+  @@index([isActive])
+  @@map("treatment_goals")
+}
+
+model TreatmentTask {
+  id              String               @id @default(uuid())
+
+  // Task details
+  title           String               @db.VarChar(255)
+  description     String?              @db.Text
+  instructions    String?              @db.Text
+
+  // Scheduling
+  dueDate         DateTime?            @map("due_date")
+  completedAt     DateTime?            @map("completed_at")
+  estimatedDuration Int?               @map("estimated_duration") // in minutes
+
+  // Status and priority
+  status          TaskStatus           @default(PENDING)
+  priority        TaskPriority         @default(MEDIUM)
+
+  // Task type and category
+  taskType        String               @map("task_type") @db.VarChar(100) // medication, exercise, appointment, test, etc.
+  category        String?              @db.VarChar(100) // physical_therapy, medication_management, lifestyle, etc.
+
+  // Progress and completion
+  progress        Int                  @default(0) // 0-100%
+  completionNotes String?              @map("completion_notes") @db.Text
+
+  // Recurrence (for recurring tasks)
+  isRecurring     Boolean              @default(false) @map("is_recurring")
+  recurrencePattern Json?              @map("recurrence_pattern") // frequency, interval, days, etc.
+
+  // Relations
+  treatmentPlanId String               @map("treatment_plan_id")
+  goalId          String?              @map("goal_id")
+  assignedTo      String?              @map("assigned_to")
+  createdBy       String               @map("created_by")
+
+  // Metadata
+  isActive        Boolean              @default(true) @map("is_active")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  // Relations
+  treatmentPlan   TreatmentPlan        @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  goal            TreatmentGoal?       @relation(fields: [goalId], references: [id])
+  assignedToUser  User?                @relation("TreatmentTaskAssignedTo", fields: [assignedTo], references: [id])
+  createdByUser   User                 @relation("TreatmentTaskCreatedBy", fields: [createdBy], references: [id])
+
+  // Child relations
+  progressEntries TreatmentProgress[]
+
+  @@index([treatmentPlanId])
+  @@index([goalId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([taskType])
+  @@index([isActive])
+  @@map("treatment_tasks")
+}
+
+model TreatmentProgress {
+  id              String               @id @default(uuid())
+
+  // Progress details
+  date            DateTime
+  progressType    String               @map("progress_type") @db.VarChar(100) // goal_progress, task_completion, assessment, etc.
+  value           String?              @db.VarChar(255) // numeric value, status, or measurement
+  unit            String?              @db.VarChar(50)
+
+  // Notes and observations
+  notes           String?              @db.Text
+  observations    String?              @db.Text
+
+  // Attachments
+  attachments     Json?                // Array of file references
+
+  // Relations
+  treatmentPlanId String               @map("treatment_plan_id")
+  goalId          String?              @map("goal_id")
+  taskId          String?              @map("task_id")
+  recordedBy      String               @map("recorded_by")
+
+  // Metadata
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  // Relations
+  treatmentPlan   TreatmentPlan        @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  goal            TreatmentGoal?       @relation(fields: [goalId], references: [id])
+  task            TreatmentTask?       @relation(fields: [taskId], references: [id])
+  recordedByUser  User                 @relation("TreatmentProgressRecordedBy", fields: [recordedBy], references: [id])
+
+  @@index([treatmentPlanId])
+  @@index([goalId])
+  @@index([taskId])
+  @@index([date])
+  @@index([progressType])
+  @@map("treatment_progress")
+}
+
+model TreatmentReview {
+  id              String               @id @default(uuid())
+
+  // Review details
+  reviewDate      DateTime             @map("review_date")
+  reviewType      String               @map("review_type") @db.VarChar(100) // scheduled, emergency, discharge, etc.
+
+  // Assessment
+  overallAssessment String?            @map("overall_assessment") @db.Text
+  progressSummary String?              @map("progress_summary") @db.Text
+  goalsAssessment Json?                @map("goals_assessment") // Assessment of each goal
+
+  // Recommendations
+  recommendations String?              @db.Text
+  adjustments     String?              @db.Text
+  nextSteps       String?              @map("next_steps") @db.Text
+
+  // Next review
+  nextReviewDate  DateTime?            @map("next_review_date")
+
+  // Status changes
+  statusBefore    TreatmentPlanStatus? @map("status_before")
+  statusAfter     TreatmentPlanStatus? @map("status_after")
+
+  // Relations
+  treatmentPlanId String               @map("treatment_plan_id")
+  reviewedBy      String               @map("reviewed_by")
+
+  // Metadata
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  // Relations
+  treatmentPlan   TreatmentPlan        @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  reviewedByUser  User                 @relation("TreatmentReviewReviewedBy", fields: [reviewedBy], references: [id])
+
+  @@index([treatmentPlanId])
+  @@index([reviewDate])
+  @@index([reviewType])
+  @@map("treatment_reviews")
 }

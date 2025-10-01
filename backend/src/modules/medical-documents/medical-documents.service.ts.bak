@@ -1,0 +1,398 @@
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '../../config/prisma.service';
+import { MedicalDocument, DocumentType, Prisma } from '@prisma/client';
+import { CreateMedicalDocumentDto, UpdateMedicalDocumentDto } from './dto';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+
+@Injectable()
+export class MedicalDocumentsService {
+  private readonly uploadPath = './uploads/medical-documents';
+
+  constructor(private prisma: PrismaService) {
+    this.ensureUploadDirectory();
+  }
+
+  private async ensureUploadDirectory() {
+    try {
+      await fs.access(this.uploadPath);
+    } catch {
+      await fs.mkdir(this.uploadPath, { recursive: true });
+    }
+  }
+
+  async create(createMedicalDocumentDto: CreateMedicalDocumentDto): Promise<MedicalDocument> {
+    // Verify patient exists
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: createMedicalDocumentDto.patientId },
+    });
+
+    if (!patient) {
+      throw new NotFoundException('Patient not found');
+    }
+
+    // If medical record ID is provided, verify it exists and belongs to the patient
+    if (createMedicalDocumentDto.medicalRecordId) {
+      const medicalRecord = await this.prisma.medicalRecord.findFirst({
+        where: {
+          id: createMedicalDocumentDto.medicalRecordId,
+          patientId: createMedicalDocumentDto.patientId,
+        },
+      });
+
+      if (!medicalRecord) {
+        throw new NotFoundException('Medical record not found or does not belong to the patient');
+      }
+    }
+
+    return this.prisma.medicalDocument.create({
+      data: createMedicalDocumentDto,
+      include: {
+        patient: {
+          select: {
+            id: true,
+            patientId: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        medicalRecord: {
+          select: {
+            id: true,
+            title: true,
+            recordType: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findAll(filters?: {
+    patientId?: string;
+    type?: DocumentType;
+    isActive?: boolean;
+    limit?: number;
+  }) {
+    const where: Prisma.MedicalDocumentWhereInput = {};
+
+    if (filters?.patientId) {
+      where.patientId = filters.patientId;
+    }
+
+    if (filters?.type) {
+      where.type = filters.type;
+    }
+
+    if (filters?.isActive !== undefined) {
+      where.isActive = filters.isActive;
+    }
+
+    return this.prisma.medicalDocument.findMany({
+      where,
+      take: filters?.limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            patientId: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        medicalRecord: {
+          select: {
+            id: true,
+            title: true,
+            recordType: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findOne(id: string): Promise<MedicalDocument> {
+    const document = await this.prisma.medicalDocument.findUnique({
+      where: { id },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            patientId: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        medicalRecord: {
+          select: {
+            id: true,
+            title: true,
+            recordType: true,
+          },
+        },
+      },
+    });
+
+    if (!document) {
+      throw new NotFoundException('Medical document not found');
+    }
+
+    return document;
+  }
+
+  async update(id: string, updateMedicalDocumentDto: UpdateMedicalDocumentDto): Promise<MedicalDocument> {
+    await this.findOne(id);
+
+    return this.prisma.medicalDocument.update({
+      where: { id },
+      data: updateMedicalDocumentDto,
+      include: {
+        patient: {
+          select: {
+            id: true,
+            patientId: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        medicalRecord: {
+          select: {
+            id: true,
+            title: true,
+            recordType: true,
+          },
+        },
+      },
+    });
+  }
+
+  async remove(id: string): Promise<void> {
+    const document = await this.findOne(id);
+
+    // Delete the file from filesystem
+    try {
+      await fs.unlink(document.filePath);
+    } catch (error) {
+      console.warn(`Failed to delete file ${document.filePath}:`, error);
+    }
+
+    await this.prisma.medicalDocument.delete({
+      where: { id },
+    });
+  }
+
+  async softDelete(id: string): Promise<MedicalDocument> {
+    await this.findOne(id);
+
+    return this.prisma.medicalDocument.update({
+      where: { id },
+      data: { isActive: false },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            patientId: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        medicalRecord: {
+          select: {
+            id: true,
+            title: true,
+            recordType: true,
+          },
+        },
+      },
+    });
+  }
+
+  async getPatientDocuments(patientId: string, type?: DocumentType) {
+    const where: Prisma.MedicalDocumentWhereInput = {
+      patientId,
+      isActive: true,
+    };
+
+    if (type) {
+      where.type = type;
+    }
+
+    return this.prisma.medicalDocument.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        medicalRecord: {
+          select: {
+            id: true,
+            title: true,
+            recordType: true,
+          },
+        },
+      },
+    });
+  }
+
+  async getDocumentsStatistics(patientId?: string) {
+    const where: Prisma.MedicalDocumentWhereInput = { isActive: true };
+
+    if (patientId) {
+      where.patientId = patientId;
+    }
+
+    const [total, byType] = await Promise.all([
+      this.prisma.medicalDocument.count({ where }),
+      this.prisma.medicalDocument.groupBy({
+        by: ['type'],
+        where,
+        _count: true,
+      }),
+    ]);
+
+    return {
+      total,
+      byType: byType.map(item => ({
+        type: item.type,
+        count: item._count,
+      })),
+    };
+  }
+
+  async uploadFile(
+    file: Express.Multer.File,
+    patientId: string,
+    type: DocumentType,
+    title: string,
+    uploadedBy: string,
+    description?: string,
+    medicalRecordId?: string,
+  ): Promise<MedicalDocument> {
+    // Generate unique filename
+    const timestamp = Date.now();
+    const originalName = file.originalname;
+    const extension = path.extname(originalName);
+    const filename = `${timestamp}-${Math.random().toString(36).substring(2)}${extension}`;
+    const filePath = path.join(this.uploadPath, filename);
+
+    try {
+      // Save file to disk
+      await fs.writeFile(filePath, file.buffer);
+
+      // Create database record
+      const document = await this.create({
+        patientId,
+        medicalRecordId,
+        type,
+        title,
+        description,
+        filePath,
+        fileName: originalName,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        uploadedBy,
+        isActive: true,
+      });
+
+      return document;
+    } catch (error) {
+      // Clean up file if database operation fails
+      try {
+        await fs.unlink(filePath);
+      } catch {
+        // Ignore cleanup errors
+      }
+      throw error;
+    }
+  }
+
+  async downloadFile(id: string): Promise<{ filePath: string; fileName: string; mimeType: string }> {
+    const document = await this.findOne(id);
+
+    // Check if file exists
+    try {
+      await fs.access(document.filePath);
+    } catch {
+      throw new NotFoundException('File not found on disk');
+    }
+
+    return {
+      filePath: document.filePath,
+      fileName: document.fileName,
+      mimeType: document.mimeType,
+    };
+  }
+
+  async searchDocuments(query: string, patientId?: string, limit: number = 20) {
+    const where: Prisma.MedicalDocumentWhereInput = {
+      isActive: true,
+      OR: [
+        { title: { contains: query } },
+        { description: { contains: query } },
+        { fileName: { contains: query } },
+      ],
+    };
+
+    if (patientId) {
+      where.patientId = patientId;
+    }
+
+    return this.prisma.medicalDocument.findMany({
+      where,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            patientId: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        medicalRecord: {
+          select: {
+            id: true,
+            title: true,
+            recordType: true,
+          },
+        },
+      },
+    });
+  }
+
+  // Search patients for document association
+  async searchPatients(query: string): Promise<Array<{
+    id: string;
+    patientId: string;
+    firstName: string;
+    lastName: string;
+    dateOfBirth: string;
+    phone: string;
+  }>> {
+    if (query.length < 2) return [];
+
+    return this.prisma.patient.findMany({
+      where: {
+        OR: [
+          { firstName: { contains: query } },
+          { lastName: { contains: query } },
+          { patientId: { contains: query } },
+          { phone: { contains: query } },
+        ],
+        status: 'active',
+      },
+      select: {
+        id: true,
+        patientId: true,
+        firstName: true,
+        lastName: true,
+        dateOfBirth: true,
+        phone: true,
+      },
+      take: 10,
+      orderBy: [
+        { firstName: 'asc' },
+        { lastName: 'asc' },
+      ],
+    });
+  }
+}

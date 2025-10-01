@@ -11,6 +11,7 @@ import {
   UseGuards,
   ParseIntPipe,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { PrescriptionsService, Medicine, DrugInteraction } from './prescriptions.service';
 import { CreatePrescriptionDto } from './dto/create-prescription.dto';
 import { UpdatePrescriptionDto } from './dto/update-prescription.dto';
@@ -78,6 +79,7 @@ export class PrescriptionsController {
   }
 
   @Get('medicines/search')
+  @SkipThrottle({ default: true, auth: true, strict: true })
   @Roles(UserRole.admin, UserRole.doctor, UserRole.nurse)
   searchMedicines(
     @Query('query') query: string,

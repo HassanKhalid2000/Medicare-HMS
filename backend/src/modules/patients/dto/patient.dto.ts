@@ -1,5 +1,6 @@
 import { IsString, IsOptional, IsEnum, IsDateString, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export enum PatientStatus {
   ACTIVE = 'active',
@@ -68,12 +69,14 @@ export class PatientQueryDto {
   gender?: Gender;
 
   @ApiProperty({ description: 'Page number', default: 1, required: false })
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @IsOptional()
   page?: number = 1;
 
   @ApiProperty({ description: 'Items per page', default: 10, required: false })
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)

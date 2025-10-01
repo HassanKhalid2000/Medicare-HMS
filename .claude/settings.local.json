@@ -33,7 +33,12 @@
       "Bash(xargs kill:*)",
       "Bash(open http://localhost:3000)",
       "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"yes\" npx prisma migrate reset --force)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNGU1NTZkNC05MGYzLTQwOGEtOTdjYi1lODkyYTM2YTk2YjAiLCJlbWFpbCI6ImFkbWluQG1lZGljb3JlLmNvbSIsInJvbGUiOiJhZG1pbiIsImZ1bGxOYW1lIjoiQWRtaW4gVXNlciIsImp0aSI6InhlMzB4aGY4czRtZzZnY2V0ZiIsInR5cGUiOiJhY2Nlc3MiLCJpYXQiOjE3NTkyMzAzNzcsImV4cCI6MTc1OTIzMTI3N30.UCE_NbAS_bU-3h2ghkcBEVS5NaxQOvO_VxJ15R3P4og\")",
+      "Bash(kill:*)",
+      "Read(//dev/fd/**)",
+      "Bash(open http://localhost:3000/prescriptions)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

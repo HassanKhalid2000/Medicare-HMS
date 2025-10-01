@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsString, IsNumber, Min } from 'class-validator';
+import { IsOptional, IsEnum, IsString, IsInt, Min, Max } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { Specialization, DoctorStatus } from '@prisma/client';
@@ -22,15 +22,16 @@ export class DoctorQueryDto {
   @ApiPropertyOptional({ description: 'Page number', default: 1 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value))
-  @IsNumber()
+  @IsInt()
   @Min(1)
   page?: number = 1;
 
   @ApiPropertyOptional({ description: 'Items per page', default: 10 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value))
-  @IsNumber()
+  @IsInt()
   @Min(1)
+  @Max(100)
   limit?: number = 10;
 
   @ApiPropertyOptional({ description: 'Sort by field', default: 'name' })

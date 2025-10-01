@@ -85,8 +85,24 @@ export class DiagnosesService {
       }
     }
 
+    // Convert diagnosedAt date string to DateTime if provided
+    const data: any = { ...createDiagnosisDto };
+    if (data.diagnosedAt && typeof data.diagnosedAt === 'string') {
+      // If it's just a date (YYYY-MM-DD), append time to make it a valid ISO-8601 DateTime
+      if (data.diagnosedAt.length === 10) {
+        data.diagnosedAt = new Date(data.diagnosedAt + 'T00:00:00.000Z');
+      } else {
+        data.diagnosedAt = new Date(data.diagnosedAt);
+      }
+      console.log('Converted diagnosedAt:', data.diagnosedAt);
+    } else if (data.diagnosedAt) {
+      console.log('diagnosedAt already a Date:', data.diagnosedAt);
+    } else {
+      console.log('No diagnosedAt provided');
+    }
+
     const diagnosis = await this.prisma.diagnosis.create({
-      data: createDiagnosisDto,
+      data,
       include: {
         medicalRecord: {
           select: {
@@ -107,7 +123,11 @@ export class DiagnosesService {
       }
     });
 
-    return diagnosis;
+    // Flatten patient data to match frontend expectation
+    return {
+      ...diagnosis,
+      patient: diagnosis.medicalRecord.patient,
+    } as any;
   }
 
   async findAll(filters: DiagnosisFilters) {
@@ -140,7 +160,7 @@ export class DiagnosesService {
       ];
     }
 
-    const [data, total] = await Promise.all([
+    const [diagnoses, total] = await Promise.all([
       this.prisma.diagnosis.findMany({
         where,
         include: {
@@ -168,6 +188,12 @@ export class DiagnosesService {
       this.prisma.diagnosis.count({ where }),
     ]);
 
+    // Flatten patient data to match frontend expectation
+    const data = diagnoses.map(diagnosis => ({
+      ...diagnosis,
+      patient: diagnosis.medicalRecord.patient,
+    })) as any;
+
     return {
       data,
       meta: {
@@ -188,7 +214,7 @@ export class DiagnosesService {
       throw new NotFoundException('Medical record not found');
     }
 
-    return this.prisma.diagnosis.findMany({
+    const diagnoses = await this.prisma.diagnosis.findMany({
       where: { medicalRecordId },
       include: {
         medicalRecord: {
@@ -210,6 +236,12 @@ export class DiagnosesService {
       },
       orderBy: { diagnosedAt: 'desc' },
     });
+
+    // Flatten patient data to match frontend expectation
+    return diagnoses.map(diagnosis => ({
+      ...diagnosis,
+      patient: diagnosis.medicalRecord.patient,
+    })) as any;
   }
 
   async findByPatient(patientId: string, filters: PatientDiagnosisFilters) {
@@ -234,7 +266,7 @@ export class DiagnosesService {
       where.isActive = isActive;
     }
 
-    const [data, total] = await Promise.all([
+    const [diagnoses, total] = await Promise.all([
       this.prisma.diagnosis.findMany({
         where,
         include: {
@@ -261,6 +293,12 @@ export class DiagnosesService {
       }),
       this.prisma.diagnosis.count({ where }),
     ]);
+
+    // Flatten patient data to match frontend expectation
+    const data = diagnoses.map(diagnosis => ({
+      ...diagnosis,
+      patient: diagnosis.medicalRecord.patient,
+    })) as any;
 
     return {
       data,
@@ -499,4 +537,4 @@ export class DiagnosesService {
       where: { id },
     });
   }
-}
+}// Flatten patient data for frontend compatibility

@@ -9,21 +9,22 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
+        skipIf: () => false,
         throttlers: [
           {
             name: 'default',
             ttl: 60 * 1000, // 1 minute
-            limit: 1000, // 1000 requests per minute per IP (increased for development)
+            limit: 10000, // Increased to 10000 for development
           },
           {
             name: 'auth',
             ttl: 15 * 60 * 1000, // 15 minutes
-            limit: 50, // 50 auth attempts per 15 minutes per IP (increased for development)
+            limit: 500, // Increased for development
           },
           {
             name: 'strict',
             ttl: 60 * 1000, // 1 minute
-            limit: 200, // 200 requests per minute per IP for sensitive endpoints (increased for development)
+            limit: 2000, // Increased for development
           },
         ],
       }),

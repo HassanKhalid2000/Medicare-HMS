@@ -36,6 +36,7 @@
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/throttler": "^6.4.0",
     "@prisma/client": "^6.16.2",
+    "@types/pdfkit": "^0.17.3",
     "bcryptjs": "^3.0.2",
     "bull": "^4.16.5",
     "class-transformer": "^0.5.1",
@@ -49,11 +50,13 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
+    "pdfkit": "^0.17.2",
     "prisma": "^6.16.2",
     "puppeteer": "^24.22.0",
     "redis": "^5.8.2",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.10",

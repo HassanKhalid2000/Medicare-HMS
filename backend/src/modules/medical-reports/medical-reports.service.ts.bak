@@ -1,0 +1,688 @@
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { PrismaService } from '../../config/prisma.service';
+import { CreateReportDto } from './dto/create-report.dto';
+import { UpdateReportDto } from './dto/update-report.dto';
+import { ReportQueryDto } from './dto/report-query.dto';
+import { CreateReportTemplateDto } from './dto/create-report-template.dto';
+import { ReportType, ReportFormat, ReportStatus, MedicalReport } from '@prisma/client';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as PDFDocument from 'pdfkit';
+
+@Injectable()
+export class MedicalReportsService {
+  private readonly logger = new Logger(MedicalReportsService.name);
+  private readonly reportsPath = path.join(process.cwd(), 'uploads', 'reports');
+
+  constructor(private prisma: PrismaService) {
+    this.ensureReportsDirectory();
+  }
+
+  async create(createReportDto: CreateReportDto, requestedBy: string) {
+    try {
+      // Set default expiration to 30 days from now if not provided
+      const expiresAt = createReportDto.expiresAt
+        ? new Date(createReportDto.expiresAt)
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      const report = await this.prisma.medicalReport.create({
+        data: {
+          ...createReportDto,
+          requestedBy,
+          expiresAt,
+          format: createReportDto.format || ReportFormat.PDF,
+        },
+        include: {
+          requestedByUser: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              role: true,
+            },
+          },
+        },
+      });
+
+      // Start report generation asynchronously
+      this.generateReportAsync(report.id);
+
+      return report;
+    } catch (error) {
+      this.logger.error('Error creating report:', error);
+      throw new BadRequestException('Failed to create report');
+    }
+  }
+
+  async findAll(query: ReportQueryDto, userId?: string) {
+    const {
+      page = 1,
+      limit = 10,
+      type,
+      status,
+      format,
+      requestedBy,
+      startDate,
+      endDate,
+      search,
+      sortBy = 'requestedAt',
+      sortOrder = 'desc',
+    } = query;
+
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (type) where.type = type;
+    if (status) where.status = status;
+    if (format) where.format = format;
+    if (requestedBy) where.requestedBy = requestedBy;
+
+    if (startDate || endDate) {
+      where.requestedAt = {};
+      if (startDate) where.requestedAt.gte = new Date(startDate);
+      if (endDate) where.requestedAt.lte = new Date(endDate);
+    }
+
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // If userId is provided, filter to user's reports only
+    if (userId) {
+      where.requestedBy = userId;
+    }
+
+    const [reports, total] = await Promise.all([
+      this.prisma.medicalReport.findMany({
+        where,
+        include: {
+          requestedByUser: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              role: true,
+            },
+          },
+          generatedByUser: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take: limit,
+      }),
+      this.prisma.medicalReport.count({ where }),
+    ]);
+
+    return {
+      data: reports,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async findOne(id: string, userId?: string) {
+    const report = await this.prisma.medicalReport.findUnique({
+      where: { id },
+      include: {
+        requestedByUser: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            role: true,
+          },
+        },
+        generatedByUser: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
+
+    // Check if user has access to this report
+    if (userId && report.requestedBy !== userId) {
+      throw new NotFoundException('Report not found');
+    }
+
+    return report;
+  }
+
+  async update(id: string, updateReportDto: UpdateReportDto, userId?: string) {
+    const existingReport = await this.findOne(id, userId);
+
+    const report = await this.prisma.medicalReport.update({
+      where: { id },
+      data: updateReportDto,
+      include: {
+        requestedByUser: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    return report;
+  }
+
+  async remove(id: string, userId?: string) {
+    const existingReport = await this.findOne(id, userId);
+
+    // Delete file if exists
+    if (existingReport.filePath) {
+      try {
+        await fs.unlink(existingReport.filePath);
+      } catch (error) {
+        this.logger.warn(`Failed to delete report file: ${existingReport.filePath}`, error);
+      }
+    }
+
+    await this.prisma.medicalReport.delete({
+      where: { id },
+    });
+
+    return { message: 'Report deleted successfully' };
+  }
+
+  async downloadReport(id: string, userId?: string) {
+    const report = await this.findOne(id, userId);
+
+    if (report.status !== ReportStatus.COMPLETED) {
+      throw new BadRequestException('Report is not ready for download');
+    }
+
+    if (!report.filePath || !report.fileName) {
+      throw new NotFoundException('Report file not found');
+    }
+
+    try {
+      const fileBuffer = await fs.readFile(report.filePath);
+      return {
+        buffer: fileBuffer,
+        filename: report.fileName,
+        contentType: this.getContentType(report.format),
+      };
+    } catch (error) {
+      this.logger.error('Error reading report file:', error);
+      throw new NotFoundException('Report file not found');
+    }
+  }
+
+  async getReportStats(userId?: string) {
+    const where = userId ? { requestedBy: userId } : {};
+
+    const [
+      totalReports,
+      pendingReports,
+      completedReports,
+      failedReports,
+      recentReports,
+    ] = await Promise.all([
+      this.prisma.medicalReport.count({ where }),
+      this.prisma.medicalReport.count({ where: { ...where, status: ReportStatus.PENDING } }),
+      this.prisma.medicalReport.count({ where: { ...where, status: ReportStatus.COMPLETED } }),
+      this.prisma.medicalReport.count({ where: { ...where, status: ReportStatus.FAILED } }),
+      this.prisma.medicalReport.findMany({
+        where,
+        include: {
+          requestedByUser: {
+            select: {
+              fullName: true,
+            },
+          },
+        },
+        orderBy: { requestedAt: 'desc' },
+        take: 5,
+      }),
+    ]);
+
+    return {
+      totalReports,
+      pendingReports,
+      completedReports,
+      failedReports,
+      recentReports,
+    };
+  }
+
+  // Report Templates
+  async createTemplate(createTemplateDto: CreateReportTemplateDto, createdBy: string) {
+    return this.prisma.reportTemplate.create({
+      data: {
+        ...createTemplateDto,
+        createdBy,
+      },
+      include: {
+        createdByUser: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findAllTemplates(type?: ReportType, isPublic?: boolean) {
+    const where: any = { isActive: true };
+    if (type) where.type = type;
+    if (isPublic !== undefined) where.isPublic = isPublic;
+
+    return this.prisma.reportTemplate.findMany({
+      where,
+      include: {
+        createdByUser: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findOneTemplate(id: string) {
+    const template = await this.prisma.reportTemplate.findUnique({
+      where: { id },
+      include: {
+        createdByUser: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!template) {
+      throw new NotFoundException('Report template not found');
+    }
+
+    return template;
+  }
+
+  // Report Generation
+  private async generateReportAsync(reportId: string) {
+    try {
+      await this.updateReportStatus(reportId, ReportStatus.GENERATING);
+
+      const report = await this.prisma.medicalReport.findUnique({
+        where: { id: reportId },
+      });
+
+      if (!report) {
+        throw new Error('Report not found');
+      }
+
+      const reportData = await this.fetchReportData(report);
+      const filePath = await this.generateReportFile(report, reportData);
+
+      await this.prisma.medicalReport.update({
+        where: { id: reportId },
+        data: {
+          status: ReportStatus.COMPLETED,
+          filePath,
+          fileName: path.basename(filePath),
+          fileSize: (await fs.stat(filePath)).size,
+          completedAt: new Date(),
+        },
+      });
+
+      this.logger.log(`Report ${reportId} generated successfully`);
+    } catch (error) {
+      this.logger.error(`Error generating report ${reportId}:`, error);
+
+      await this.prisma.medicalReport.update({
+        where: { id: reportId },
+        data: {
+          status: ReportStatus.FAILED,
+          errorMessage: error.message,
+          retryCount: { increment: 1 },
+        },
+      });
+    }
+  }
+
+  private async updateReportStatus(reportId: string, status: ReportStatus) {
+    await this.prisma.medicalReport.update({
+      where: { id: reportId },
+      data: {
+        status,
+        startedAt: status === ReportStatus.GENERATING ? new Date() : undefined,
+      },
+    });
+  }
+
+  private async fetchReportData(report: MedicalReport) {
+    // This method would fetch the appropriate data based on report type
+    // For now, implementing basic data fetching
+
+    const filters = report.filters as any || {};
+    const startDate = filters.startDate ? new Date(filters.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const endDate = filters.endDate ? new Date(filters.endDate) : new Date();
+
+    switch (report.type) {
+      case ReportType.PATIENT_SUMMARY:
+        return this.fetchPatientSummaryData(filters.patientId, startDate, endDate);
+
+      case ReportType.APPOINTMENT_REPORT:
+        return this.fetchAppointmentData(startDate, endDate, filters);
+
+      case ReportType.VITAL_SIGNS_REPORT:
+        return this.fetchVitalSignsData(startDate, endDate, filters);
+
+      case ReportType.PRESCRIPTION_REPORT:
+        return this.fetchPrescriptionData(startDate, endDate, filters);
+
+      default:
+        return { message: 'Report type not implemented yet' };
+    }
+  }
+
+  private async fetchPatientSummaryData(patientId: string, startDate: Date, endDate: Date) {
+    if (!patientId) {
+      throw new Error('Patient ID is required for patient summary report');
+    }
+
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: patientId },
+      include: {
+        appointments: {
+          where: {
+            appointmentDate: { gte: startDate, lte: endDate },
+          },
+          include: { doctor: true },
+          orderBy: { appointmentDate: 'desc' },
+        },
+        medicalRecords: {
+          where: {
+            createdAt: { gte: startDate, lte: endDate },
+          },
+          include: { doctor: true },
+          orderBy: { createdAt: 'desc' },
+        },
+        vitalSigns: {
+          where: {
+            measuredAt: { gte: startDate, lte: endDate },
+          },
+          orderBy: { measuredAt: 'desc' },
+        },
+      },
+    });
+
+    if (!patient) {
+      throw new Error('Patient not found');
+    }
+
+    return {
+      patient,
+      summary: {
+        totalAppointments: patient.appointments.length,
+        totalMedicalRecords: patient.medicalRecords.length,
+        totalVitalSigns: patient.vitalSigns.length,
+        reportPeriod: { startDate, endDate },
+      },
+    };
+  }
+
+  private async fetchAppointmentData(startDate: Date, endDate: Date, filters: any) {
+    const where: any = {
+      appointmentDate: { gte: startDate, lte: endDate },
+    };
+
+    if (filters.doctorId) where.doctorId = filters.doctorId;
+    if (filters.status) where.status = filters.status;
+
+    const appointments = await this.prisma.appointment.findMany({
+      where,
+      include: {
+        patient: {
+          select: {
+            firstName: true,
+            lastName: true,
+            patientId: true,
+          },
+        },
+        doctor: {
+          select: {
+            name: true,
+            specialization: true,
+          },
+        },
+      },
+      orderBy: { appointmentDate: 'desc' },
+    });
+
+    return {
+      appointments,
+      summary: {
+        totalAppointments: appointments.length,
+        reportPeriod: { startDate, endDate },
+      },
+    };
+  }
+
+  private async fetchVitalSignsData(startDate: Date, endDate: Date, filters: any) {
+    const where: any = {
+      measuredAt: { gte: startDate, lte: endDate },
+    };
+
+    if (filters.patientId) where.patientId = filters.patientId;
+    if (filters.type) where.type = filters.type;
+
+    const vitalSigns = await this.prisma.vitalSign.findMany({
+      where,
+      include: {
+        patient: {
+          select: {
+            firstName: true,
+            lastName: true,
+            patientId: true,
+          },
+        },
+      },
+      orderBy: { measuredAt: 'desc' },
+    });
+
+    return {
+      vitalSigns,
+      summary: {
+        totalMeasurements: vitalSigns.length,
+        abnormalCount: vitalSigns.filter(vs => vs.isAbnormal).length,
+        reportPeriod: { startDate, endDate },
+      },
+    };
+  }
+
+  private async fetchPrescriptionData(startDate: Date, endDate: Date, filters: any) {
+    const where: any = {
+      createdAt: { gte: startDate, lte: endDate },
+    };
+
+    if (filters.patientId) where.patientId = filters.patientId;
+    if (filters.doctorId) where.doctorId = filters.doctorId;
+
+    const prescriptions = await this.prisma.prescription.findMany({
+      where,
+      include: {
+        patient: {
+          select: {
+            firstName: true,
+            lastName: true,
+            patientId: true,
+          },
+        },
+        doctor: {
+          select: {
+            name: true,
+            specialization: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      prescriptions,
+      summary: {
+        totalPrescriptions: prescriptions.length,
+        reportPeriod: { startDate, endDate },
+      },
+    };
+  }
+
+  private async generateReportFile(report: MedicalReport, data: any): Promise<string> {
+    const timestamp = Date.now();
+    const fileName = `${report.type.toLowerCase()}_${timestamp}.${report.format.toLowerCase()}`;
+    const filePath = path.join(this.reportsPath, fileName);
+
+    switch (report.format) {
+      case ReportFormat.PDF:
+        await this.generatePDFReport(filePath, report, data);
+        break;
+      case ReportFormat.CSV:
+        await this.generateCSVReport(filePath, report, data);
+        break;
+      case ReportFormat.JSON:
+        await this.generateJSONReport(filePath, report, data);
+        break;
+      default:
+        throw new Error(`Unsupported report format: ${report.format}`);
+    }
+
+    return filePath;
+  }
+
+  private async generatePDFReport(filePath: string, report: MedicalReport, data: any) {
+    const doc = new PDFDocument();
+    const stream = require('fs').createWriteStream(filePath);
+    doc.pipe(stream);
+
+    // Header
+    doc.fontSize(20).text(report.title, 50, 50);
+    doc.fontSize(12).text(`Generated: ${new Date().toLocaleString()}`, 50, 80);
+    doc.fontSize(12).text(`Report Type: ${report.type}`, 50, 100);
+
+    let yPosition = 140;
+
+    // Content based on report type
+    if (report.type === ReportType.PATIENT_SUMMARY && data.patient) {
+      doc.fontSize(16).text('Patient Information', 50, yPosition);
+      yPosition += 30;
+
+      doc.fontSize(12)
+        .text(`Name: ${data.patient.firstName} ${data.patient.lastName}`, 50, yPosition)
+        .text(`Patient ID: ${data.patient.patientId}`, 50, yPosition + 20)
+        .text(`Gender: ${data.patient.gender}`, 50, yPosition + 40)
+        .text(`Date of Birth: ${new Date(data.patient.dateOfBirth).toLocaleDateString()}`, 50, yPosition + 60);
+
+      yPosition += 100;
+
+      if (data.summary) {
+        doc.fontSize(16).text('Summary', 50, yPosition);
+        yPosition += 30;
+
+        doc.fontSize(12)
+          .text(`Total Appointments: ${data.summary.totalAppointments}`, 50, yPosition)
+          .text(`Total Medical Records: ${data.summary.totalMedicalRecords}`, 50, yPosition + 20)
+          .text(`Total Vital Signs: ${data.summary.totalVitalSigns}`, 50, yPosition + 40);
+      }
+    } else {
+      doc.fontSize(12).text('Report data:', 50, yPosition);
+      doc.fontSize(10).text(JSON.stringify(data, null, 2), 50, yPosition + 20);
+    }
+
+    doc.end();
+
+    return new Promise((resolve, reject) => {
+      stream.on('finish', resolve);
+      stream.on('error', reject);
+    });
+  }
+
+  private async generateCSVReport(filePath: string, report: MedicalReport, data: any) {
+    let csvContent = `"Report Title","${report.title}"\n`;
+    csvContent += `"Generated","${new Date().toISOString()}"\n`;
+    csvContent += `"Type","${report.type}"\n\n`;
+
+    // Add data based on report type
+    if (data.appointments) {
+      csvContent += '"Date","Time","Patient","Doctor","Status"\n';
+      data.appointments.forEach((apt: any) => {
+        csvContent += `"${apt.appointmentDate}","${apt.appointmentTime}","${apt.patient.firstName} ${apt.patient.lastName}","${apt.doctor.name}","${apt.status}"\n`;
+      });
+    } else if (data.vitalSigns) {
+      csvContent += '"Date","Patient","Type","Value","Unit","Abnormal"\n';
+      data.vitalSigns.forEach((vs: any) => {
+        csvContent += `"${vs.measuredAt}","${vs.patient.firstName} ${vs.patient.lastName}","${vs.type}","${vs.value}","${vs.unit}","${vs.isAbnormal}"\n`;
+      });
+    } else {
+      csvContent += '"Data"\n';
+      csvContent += `"${JSON.stringify(data)}"\n`;
+    }
+
+    await fs.writeFile(filePath, csvContent);
+  }
+
+  private async generateJSONReport(filePath: string, report: MedicalReport, data: any) {
+    const reportData = {
+      title: report.title,
+      type: report.type,
+      generatedAt: new Date().toISOString(),
+      data,
+    };
+
+    await fs.writeFile(filePath, JSON.stringify(reportData, null, 2));
+  }
+
+  private async ensureReportsDirectory() {
+    try {
+      await fs.mkdir(this.reportsPath, { recursive: true });
+    } catch (error) {
+      this.logger.error('Error creating reports directory:', error);
+    }
+  }
+
+  private getContentType(format: ReportFormat): string {
+    switch (format) {
+      case ReportFormat.PDF:
+        return 'application/pdf';
+      case ReportFormat.CSV:
+        return 'text/csv';
+      case ReportFormat.EXCEL:
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case ReportFormat.JSON:
+        return 'application/json';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+}

@@ -263,13 +263,31 @@ export class PrescriptionsService {
 
     const searchTerm = query.toLowerCase().trim();
 
-    return MEDICINES_DATABASE
-      .filter(medicine =>
-        medicine.name.toLowerCase().includes(searchTerm) ||
-        medicine.category.toLowerCase().includes(searchTerm) ||
-        medicine.manufacturer.toLowerCase().includes(searchTerm)
-      )
-      .slice(0, limit);
+    // Query the actual Medicine table from database
+    const medicines = await this.prisma.medicine.findMany({
+      where: {
+        OR: [
+          { name: { contains: searchTerm, mode: 'insensitive' } },
+          { category: { contains: searchTerm, mode: 'insensitive' } },
+          { manufacturer: { contains: searchTerm, mode: 'insensitive' } },
+        ],
+      },
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        manufacturer: true,
+        dosageInfo: true,
+        sideEffects: true,
+      },
+    });
+
+    // Transform to match Medicine interface (add empty interactions field)
+    return medicines.map(med => ({
+      ...med,
+      interactions: '',
+    }));
   }
 
   async findAll(filters: PrescriptionFilters) {
