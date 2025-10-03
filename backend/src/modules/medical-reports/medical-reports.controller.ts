@@ -194,42 +194,6 @@ export class MedicalReportsController {
     }
   }
 
-  @Get(':id/download')
-  @Roles(UserRole.doctor, UserRole.nurse, UserRole.admin)
-  async downloadReport(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Request() req,
-    @Response({ passthrough: true }) res: ExpressResponse,
-  ) {
-    try {
-      await this.medicalReportsService.findOne(id, req.user.userId);
-      throw new HttpException('Report download not implemented yet', HttpStatus.NOT_FOUND);
-    } catch (error) {
-      throw new HttpException(
-        error.message || 'Failed to download report',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  @Post(':id/regenerate')
-  @Roles(UserRole.doctor, UserRole.nurse, UserRole.admin)
-  async regenerateReport(@Param('id', ParseUUIDPipe) id: string, @Request() req) {
-    try {
-      // const report = await this.medicalReportsService.regenerateReport(id, req.user.userId);
-      const report = null;
-      return {
-        success: true,
-        data: report,
-        message: 'Report regeneration started successfully',
-      };
-    } catch (error) {
-      throw new HttpException(
-        error.message || 'Failed to regenerate report',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
 
   @Patch(':id')
   @Roles(UserRole.doctor, UserRole.nurse, UserRole.admin)

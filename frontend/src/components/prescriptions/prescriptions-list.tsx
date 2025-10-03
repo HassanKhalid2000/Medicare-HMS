@@ -32,100 +32,92 @@ import {
   MoreHorizontal,
   Eye,
   Edit,
-  UserX,
   Trash2,
-  Filter,
+  CheckCircle,
+  XCircle,
   RefreshCw,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import {
-  Admission,
-  AdmissionQuery,
-  AdmissionStatus,
-  admissionStatusLabels,
-  admissionStatusColors,
-  admissionTypeLabels,
-  wardLabels,
-  wardColors,
-} from '@/types/admission';
+import { Prescription, PrescriptionFilters, prescriptionsApi } from '@/lib/api/prescriptions';
 
-interface AdmissionsListProps {
-  onCreateAdmission: () => void;
-  onEditAdmission: (admission: Admission) => void;
-  onViewAdmission: (admission: Admission) => void;
+interface PrescriptionsListProps {
+  onCreatePrescription: () => void;
+  onEditPrescription: (prescription: Prescription) => void;
+  onViewPrescription: (prescription: Prescription) => void;
 }
 
-export function AdmissionsList({
-  onCreateAdmission,
-  onEditAdmission,
-  onViewAdmission,
-}: AdmissionsListProps) {
-  const [admissions, setAdmissions] = useState<Admission[]>([]);
+export function PrescriptionsList({
+  onCreatePrescription,
+  onEditPrescription,
+  onViewPrescription,
+}: PrescriptionsListProps) {
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [query, setQuery] = useState<AdmissionQuery>({
+  const [query, setQuery] = useState<PrescriptionFilters>({
     page: 1,
     limit: 10,
-    sortBy: 'admissionDate',
-    sortOrder: 'desc',
   });
 
-  const loadAdmissions = async () => {
+  const loadPrescriptions = async () => {
     try {
       setLoading(true);
-      const { admissionsService } = await import('@/services/admissions');
-      const response = await admissionsService.getAdmissions(query);
-
-      setAdmissions(response.data);
+      const response = await prescriptionsApi.getPrescriptions(query);
+      setPrescriptions(response.data);
       setTotal(response.meta.total);
       setCurrentPage(response.meta.page);
     } catch (error) {
-      console.error('Error loading admissions:', error);
-      setAdmissions([]);
+      console.error('Error loading prescriptions:', error);
+      setPrescriptions([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadAdmissions();
+    loadPrescriptions();
   }, [query]);
 
   const handleSearch = (search: string) => {
     setQuery({ ...query, search, page: 1 });
   };
 
-  const handleFilterChange = (key: keyof AdmissionQuery, value: string) => {
-    setQuery({ ...query, [key]: value || undefined, page: 1 });
+  const handleFilterChange = (key: keyof PrescriptionFilters, value: any) => {
+    setQuery({ ...query, [key]: value === 'all' ? undefined : value, page: 1 });
   };
 
   const handlePageChange = (page: number) => {
     setQuery({ ...query, page });
   };
 
-  const handleDischarge = async (admission: Admission) => {
-    if (confirm(`Are you sure you want to discharge ${admission.patient.firstName} ${admission.patient.lastName}?`)) {
-      try {
-        const { admissionsService } = await import('@/services/admissions');
-        await admissionsService.dischargePatient(admission.id);
-        loadAdmissions();
-      } catch (error) {
-        console.error('Error discharging patient:', error);
-      }
+  const handleActivate = async (prescription: Prescription) => {
+    try {
+      await prescriptionsApi.activatePrescription(prescription.id);
+      loadPrescriptions();
+    } catch (error) {
+      console.error('Error activating prescription:', error);
     }
   };
 
-  const handleDelete = async (admission: Admission) => {
-    if (confirm(`Are you sure you want to delete the admission for ${admission.patient.firstName} ${admission.patient.lastName}? This action cannot be undone.`)) {
+  const handleDeactivate = async (prescription: Prescription) => {
+    try {
+      await prescriptionsApi.deactivatePrescription(prescription.id);
+      loadPrescriptions();
+    } catch (error) {
+      console.error('Error deactivating prescription:', error);
+    }
+  };
+
+  const handleDelete = async (prescription: Prescription) => {
+    if (confirm(`Are you sure you want to delete this prescription? This action cannot be undone.`)) {
       try {
-        const { admissionsService } = await import('@/services/admissions');
-        await admissionsService.deleteAdmission(admission.id);
-        loadAdmissions();
+        await prescriptionsApi.deletePrescription(prescription.id);
+        loadPrescriptions();
       } catch (error) {
-        console.error('Error deleting admission:', error);
+        console.error('Error deleting prescription:', error);
       }
     }
   };
@@ -138,28 +130,28 @@ export function AdmissionsList({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Patient Admissions
+            Prescriptions
           </h2>
           <p className="text-muted-foreground">
-            Manage hospital patient admissions and ward assignments.
+            Manage patient prescriptions and medications.
           </p>
         </div>
-        <Button onClick={onCreateAdmission} className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg">
+        <Button onClick={onCreatePrescription} className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg">
           <Plus className="h-4 w-4" />
-          New Admission
+          New Prescription
         </Button>
       </div>
 
       {/* Filters */}
       <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50">
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Search</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Search patients, doctors, or rooms..."
+                  placeholder="Search medicines, patients..."
                   value={query.search || ''}
                   onChange={(e) => handleSearch(e.target.value)}
                   className="pl-10"
@@ -170,59 +162,16 @@ export function AdmissionsList({
             <div className="space-y-2">
               <label className="text-sm font-medium">Status</label>
               <Select
-                value={query.status || 'all'}
-                onValueChange={(value) => handleFilterChange('status', value === 'all' ? '' : value)}
+                value={query.isActive === undefined ? 'all' : query.isActive ? 'active' : 'inactive'}
+                onValueChange={(value) => handleFilterChange('isActive', value === 'all' ? undefined : value === 'active')}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  {Object.entries(admissionStatusLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Ward</label>
-              <Select
-                value={query.ward || 'all'}
-                onValueChange={(value) => handleFilterChange('ward', value === 'all' ? '' : value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All wards" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Wards</SelectItem>
-                  {Object.entries(wardLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Type</label>
-              <Select
-                value={query.admissionType || 'all'}
-                onValueChange={(value) => handleFilterChange('admissionType', value === 'all' ? '' : value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  {Object.entries(admissionTypeLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -230,12 +179,12 @@ export function AdmissionsList({
 
           <div className="flex items-center justify-between mt-4">
             <p className="text-sm text-muted-foreground">
-              {loading ? 'Loading...' : `${total} admission${total !== 1 ? 's' : ''} found`}
+              {loading ? 'Loading...' : `${total} prescription${total !== 1 ? 's' : ''} found`}
             </p>
             <Button
               variant="outline"
               size="sm"
-              onClick={loadAdmissions}
+              onClick={loadPrescriptions}
               disabled={loading}
               className="flex items-center gap-2"
             >
@@ -246,7 +195,7 @@ export function AdmissionsList({
         </CardContent>
       </Card>
 
-      {/* Admissions Table */}
+      {/* Prescriptions Table */}
       <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -254,11 +203,12 @@ export function AdmissionsList({
               <TableHeader>
                 <TableRow className="bg-gradient-to-r from-gray-50 to-blue-50">
                   <TableHead>Patient</TableHead>
-                  <TableHead>Doctor</TableHead>
-                  <TableHead>Ward & Room</TableHead>
-                  <TableHead>Admission Date</TableHead>
-                  <TableHead>Type</TableHead>
+                  <TableHead>Medicine</TableHead>
+                  <TableHead>Dosage</TableHead>
+                  <TableHead>Frequency</TableHead>
+                  <TableHead>Duration</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Prescribed Date</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -266,82 +216,58 @@ export function AdmissionsList({
                 {loading ? (
                   [...Array(5)].map((_, i) => (
                     <TableRow key={i}>
-                      {[...Array(7)].map((_, j) => (
+                      {[...Array(8)].map((_, j) => (
                         <TableCell key={j}>
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </TableCell>
                       ))}
                     </TableRow>
                   ))
-                ) : admissions.length === 0 ? (
+                ) : prescriptions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       <div className="text-muted-foreground">
-                        No admissions found. Try adjusting your filters or create a new admission.
+                        No prescriptions found. Try adjusting your filters or create a new prescription.
                       </div>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  admissions.map((admission) => (
+                  prescriptions.map((prescription) => (
                     <TableRow
-                      key={admission.id}
+                      key={prescription.id}
                       className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 transition-all duration-200"
                     >
                       <TableCell>
                         <div>
                           <div className="font-medium">
-                            {admission.patient?.firstName} {admission.patient?.lastName}
+                            {prescription.medicalRecord?.patient?.firstName} {prescription.medicalRecord?.patient?.lastName}
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            ID: {admission.patient?.patientId}
+                            ID: {prescription.medicalRecord?.patient?.patientId}
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{admission.doctor?.name}</div>
+                          <div className="font-medium">{prescription.medicine?.name}</div>
                           <div className="text-sm text-muted-foreground">
-                            {admission.doctor?.specialization}
+                            {prescription.medicine?.category}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div>
-                          <Badge variant="secondary" className={wardColors[admission.ward]}>
-                            {wardLabels[admission.ward]}
-                          </Badge>
-                          {admission.roomNumber && (
-                            <div className="text-sm text-muted-foreground mt-1">
-                              Room {admission.roomNumber}
-                              {admission.bedNumber && `, Bed ${admission.bedNumber}`}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">
-                            {format(new Date(admission.admissionDate), 'MMM dd, yyyy')}
-                          </div>
-                          {admission.dischargeDate && (
-                            <div className="text-sm text-muted-foreground">
-                              Discharged: {format(new Date(admission.dischargeDate), 'MMM dd, yyyy')}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {admissionTypeLabels[admission.admissionType]}
-                        </Badge>
-                      </TableCell>
+                      <TableCell>{prescription.dosage}</TableCell>
+                      <TableCell>{prescription.frequency}</TableCell>
+                      <TableCell>{prescription.duration}</TableCell>
                       <TableCell>
                         <Badge
-                          variant="secondary"
-                          className={admissionStatusColors[admission.status]}
+                          variant={prescription.isActive ? 'default' : 'secondary'}
+                          className={prescription.isActive ? 'bg-green-600' : 'bg-gray-600'}
                         >
-                          {admissionStatusLabels[admission.status]}
+                          {prescription.isActive ? 'Active' : 'Inactive'}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {format(new Date(prescription.prescribedAt), 'MMM dd, yyyy')}
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -351,22 +277,27 @@ export function AdmissionsList({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => onViewAdmission(admission)}>
+                            <DropdownMenuItem onClick={() => onViewPrescription(prescription)}>
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onEditAdmission(admission)}>
+                            <DropdownMenuItem onClick={() => onEditPrescription(prescription)}>
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
-                            {admission.status === AdmissionStatus.ADMITTED && (
-                              <DropdownMenuItem onClick={() => handleDischarge(admission)}>
-                                <UserX className="mr-2 h-4 w-4" />
-                                Discharge
+                            {prescription.isActive ? (
+                              <DropdownMenuItem onClick={() => handleDeactivate(prescription)}>
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Deactivate
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => handleActivate(prescription)}>
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Activate
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem
-                              onClick={() => handleDelete(admission)}
+                              onClick={() => handleDelete(prescription)}
                               className="text-red-600 focus:text-red-600"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />

@@ -229,6 +229,24 @@ export class BillingService {
 
     const updateData: any = { ...updateBillDto };
 
+    // Handle billItems update
+    if (updateBillDto.billItems) {
+      // Delete existing bill items
+      await this.prisma.billItem.deleteMany({
+        where: { billId: id }
+      });
+
+      // Add new bill items
+      updateData.billItems = {
+        create: updateBillDto.billItems.map(item => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: new Prisma.Decimal(item.unitPrice),
+          totalPrice: new Prisma.Decimal(item.totalPrice)
+        }))
+      };
+    }
+
     // Handle additional payment
     if (updateBillDto.additionalPayment) {
       const existingBill = await this.prisma.bill.findUnique({ where: { id } });

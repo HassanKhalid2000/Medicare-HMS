@@ -1,19 +1,25 @@
 'use client';
 
+import { useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Printer, Download } from 'lucide-react';
 import { Bill } from '@/services/billing';
+import { toast } from 'sonner';
+import jsPDF from 'jspdf';
+
+// Add Amiri Arabic font to jsPDF
+import 'jspdf-autotable';
 
 interface InvoicePreviewProps {
   bill: Bill;
-  onPrint?: () => void;
-  onDownload?: () => void;
 }
 
-export function InvoicePreview({ bill, onPrint, onDownload }: InvoicePreviewProps) {
+export function InvoicePreview({ bill }: InvoicePreviewProps) {
+  const invoiceRef = useRef<HTMLDivElement>(null);
+
   const formatAmount = (amount: string | number) => {
     return `$${parseFloat(amount.toString()).toFixed(2)}`;
   };
@@ -41,6 +47,171 @@ export function InvoicePreview({ bill, onPrint, onDownload }: InvoicePreviewProp
     }
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleDownloadPDF = () => {
+    if (!invoiceRef.current) return;
+
+    try {
+      toast.info('Generating PDF...');
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      let yPosition = margin;
+
+      // Helper function to detect Arabic text
+      const hasArabic = (text: string) => {
+        return /[\u0600-\u06FF]/.test(text);
+      };
+
+      // Helper function to transliterate or show placeholder for Arabic text
+      const processText = (text: string) => {
+        if (hasArabic(text)) {
+          // For Arabic text, show a note that it contains Arabic
+          return `[Arabic: ${text.length} chars]`;
+        }
+        return text;
+      };
+
+      // Helper function to add text
+      const addText = (text: string, x: number, y: number, options: any = {}) => {
+        const processedText = processText(text);
+        pdf.text(processedText, x, y, options);
+      };
+
+      // Header
+      pdf.setFontSize(24);
+      pdf.setFont('helvetica', 'bold');
+      addText('MEDICORE HMS', margin, yPosition);
+      yPosition += 8;
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      addText('Hospital Management System', margin, yPosition);
+      yPosition += 15;
+
+      // Invoice Info (Right side)
+      pdf.setFontSize(18);
+      pdf.setFont('helvetica', 'bold');
+      addText('INVOICE', pageWidth - margin - 40, margin);
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      addText(`Invoice #: ${bill.invoiceNumber}`, pageWidth - margin - 60, margin + 10);
+      addText(`Date: ${bill.createdAt ? formatDate(bill.createdAt) : 'N/A'}`, pageWidth - margin - 60, margin + 16);
+      if (bill.dueDate) {
+        addText(`Due Date: ${formatDate(bill.dueDate)}`, pageWidth - margin - 60, margin + 22);
+      }
+
+      // Bill To
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'bold');
+      addText('Bill To:', margin, yPosition);
+      yPosition += 7;
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      if (bill.patient) {
+        addText(`${bill.patient.firstName} ${bill.patient.lastName}`, margin, yPosition);
+        yPosition += 5;
+        addText(`Patient ID: ${bill.patient.patientId}`, margin, yPosition);
+        yPosition += 5;
+        addText(`Phone: ${bill.patient.phone}`, margin, yPosition);
+        yPosition += 10;
+      }
+
+      // Table Header
+      yPosition += 5;
+      pdf.setFillColor(240, 240, 240);
+      pdf.rect(margin, yPosition - 5, pageWidth - 2 * margin, 8, 'F');
+
+      pdf.setFont('helvetica', 'bold');
+      addText('Description', margin + 2, yPosition);
+      addText('Qty', pageWidth - 100, yPosition);
+      addText('Unit Price', pageWidth - 70, yPosition);
+      addText('Total', pageWidth - 35, yPosition);
+      yPosition += 10;
+
+      // Table Rows
+      pdf.setFont('helvetica', 'normal');
+      bill.billItems.forEach((item) => {
+        if (yPosition > pageHeight - 60) {
+          pdf.addPage();
+          yPosition = margin;
+        }
+
+        addText(item.description, margin + 2, yPosition);
+        addText(item.quantity.toString(), pageWidth - 100, yPosition);
+        addText(formatAmount(item.unitPrice), pageWidth - 70, yPosition);
+        addText(formatAmount(item.totalPrice), pageWidth - 35, yPosition);
+        yPosition += 7;
+      });
+
+      // Totals
+      yPosition += 10;
+      const totalsX = pageWidth - 70;
+
+      addText('Subtotal:', totalsX - 30, yPosition);
+      addText(formatAmount(totalAmount), totalsX + 10, yPosition);
+      yPosition += 6;
+
+      if (taxAmount > 0) {
+        addText('Tax:', totalsX - 30, yPosition);
+        addText(formatAmount(taxAmount), totalsX + 10, yPosition);
+        yPosition += 6;
+      }
+
+      if (discountAmount > 0) {
+        addText('Discount:', totalsX - 30, yPosition);
+        addText(`-${formatAmount(discountAmount)}`, totalsX + 10, yPosition);
+        yPosition += 6;
+      }
+
+      // Total Line
+      pdf.setLineWidth(0.5);
+      pdf.line(totalsX - 35, yPosition, pageWidth - margin, yPosition);
+      yPosition += 6;
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(12);
+      addText('Total:', totalsX - 30, yPosition);
+      addText(formatAmount(finalAmount), totalsX + 10, yPosition);
+      yPosition += 8;
+
+      if (paidAmount > 0) {
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'normal');
+        addText('Amount Paid:', totalsX - 30, yPosition);
+        addText(`-${formatAmount(paidAmount)}`, totalsX + 10, yPosition);
+        yPosition += 6;
+
+        pdf.line(totalsX - 35, yPosition, pageWidth - margin, yPosition);
+        yPosition += 6;
+
+        pdf.setFont('helvetica', 'bold');
+        addText('Balance Due:', totalsX - 30, yPosition);
+        addText(formatAmount(Math.max(0, balance)), totalsX + 10, yPosition);
+      }
+
+      // Footer
+      yPosition = pageHeight - 20;
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      addText('Thank you for choosing MediCore Hospital Management System!', pageWidth / 2, yPosition, { align: 'center' });
+
+      // Save PDF
+      pdf.save(`Invoice-${bill.invoiceNumber}.pdf`);
+      toast.success('PDF downloaded successfully');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF');
+    }
+  };
+
   const totalAmount = parseFloat(bill.totalAmount);
   const taxAmount = parseFloat(bill.taxAmount || '0');
   const discountAmount = parseFloat(bill.discountAmount || '0');
@@ -52,18 +223,23 @@ export function InvoicePreview({ bill, onPrint, onDownload }: InvoicePreviewProp
     <div className="max-w-4xl mx-auto">
       {/* Actions */}
       <div className="flex justify-end gap-2 mb-6 print:hidden">
-        <Button variant="outline" onClick={onPrint}>
+        <Button variant="outline" onClick={handlePrint}>
           <Printer className="w-4 h-4 mr-2" />
           Print
         </Button>
-        <Button variant="outline" onClick={onDownload}>
+        <Button variant="outline" onClick={handleDownloadPDF}>
           <Download className="w-4 h-4 mr-2" />
           Download PDF
         </Button>
       </div>
 
       {/* Invoice */}
-      <div className="bg-white print:shadow-none shadow-lg">
+      <div
+        ref={invoiceRef}
+        data-invoice
+        className="bg-white print:shadow-none shadow-lg"
+        style={{ backgroundColor: '#ffffff', color: '#000000' }}
+      >
         {/* Header */}
         <div className="p-8 border-b">
           <div className="flex justify-between items-start">

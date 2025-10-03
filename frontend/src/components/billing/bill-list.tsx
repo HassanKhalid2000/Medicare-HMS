@@ -36,10 +36,6 @@ export function BillList({ onCreateNew }: BillListProps) {
   const limit = 10;
   const totalPages = Math.ceil(total / limit);
 
-  useEffect(() => {
-    loadBills();
-  }, [currentPage, searchTerm, statusFilter, loadBills]);
-
   const loadBills = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -61,13 +57,17 @@ export function BillList({ onCreateNew }: BillListProps) {
     }
   }, [currentPage, searchTerm, statusFilter]);
 
+  useEffect(() => {
+    loadBills();
+  }, [loadBills]);
+
   const handleSearch = (value: string) => {
     setSearchTerm(value);
     setCurrentPage(1);
   };
 
   const handleStatusFilter = (value: string) => {
-    setStatusFilter(value);
+    setStatusFilter(value === 'all' ? '' : value);
     setCurrentPage(1);
   };
 
@@ -168,7 +168,7 @@ export function BillList({ onCreateNew }: BillListProps) {
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All statuses</SelectItem>
+                  <SelectItem value="all">All statuses</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="paid">Paid</SelectItem>
                   <SelectItem value="partial">Partial</SelectItem>
@@ -306,8 +306,8 @@ export function BillList({ onCreateNew }: BillListProps) {
 
       {/* Edit Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="!max-w-[1400px] w-[95vw] max-h-[90vh] overflow-y-auto p-6">
+          <DialogHeader className="mb-4">
             <DialogTitle>Edit Invoice</DialogTitle>
           </DialogHeader>
           {selectedBill && (

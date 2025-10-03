@@ -56,7 +56,14 @@
       "Bash(python3:*)",
       "Bash(open http://localhost:3000/appointments)",
       "Bash(open http://localhost:3000/patients)",
-      "Bash(open http://localhost:3000/doctors)"
+      "Bash(open http://localhost:3000/doctors)",
+      "Bash(open http://localhost:3000/admissions)",
+      "Bash(open http://localhost:3000/billing)",
+      "Bash(open http://localhost:3000/dashboard)",
+      "Bash(open http://localhost:3000/laboratory)",
+      "Bash(open http://localhost:3000/pharmacy)",
+      "Bash(open http://localhost:3000/medical-reports)",
+      "Read(//private/tmp/**)"
     ],
     "deny": [],
     "ask": []

@@ -132,3 +132,38 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Print Styles */
+@media print {
+  @page {
+    margin: 0.5cm;
+    size: A4;
+  }
+
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .print\:shadow-none {
+    box-shadow: none !important;
+  }
+
+  /* Hide elements that shouldn't be printed */
+  header,
+  nav,
+  aside,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Ensure content fits on page */
+  * {
+    page-break-inside: avoid;
+  }
+}

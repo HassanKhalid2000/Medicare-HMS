@@ -30,6 +30,9 @@ declare module 'next-auth/jwt' {
     role: 'admin' | 'doctor' | 'nurse' | 'receptionist';
     fullName: string;
     isActive: boolean;
+    accessToken?: string;
+    refreshToken?: string;
+    accessTokenExpiry?: number;
   }
 }
 
@@ -123,6 +126,7 @@ export const authOptions: NextAuthOptions = {
                 role: data.user.role,
                 isActive: data.user.isActive,
                 accessToken: data.accessToken,
+                refreshToken: data.refreshToken,
               };
             }
           } else {
@@ -153,7 +157,44 @@ export const authOptions: NextAuthOptions = {
         token.fullName = user.fullName;
         token.isActive = user.isActive;
         token.accessToken = (user as any).accessToken;
+        token.refreshToken = (user as any).refreshToken;
+        // Access token expires in 15 minutes
+        token.accessTokenExpiry = Date.now() + 15 * 60 * 1000;
       }
+
+      // Check if access token is expired or about to expire (within 2 minutes)
+      if (token.accessTokenExpiry && Date.now() > token.accessTokenExpiry - 2 * 60 * 1000) {
+        try {
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                refreshToken: token.refreshToken,
+              }),
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            token.accessToken = data.accessToken;
+            token.refreshToken = data.refreshToken;
+            token.accessTokenExpiry = Date.now() + 15 * 60 * 1000;
+            console.log('Access token refreshed successfully');
+          } else {
+            console.error('Failed to refresh access token');
+            // Token refresh failed, user will need to re-authenticate
+            return { ...token, error: 'RefreshAccessTokenError' };
+          }
+        } catch (error) {
+          console.error('Error refreshing access token:', error);
+          return { ...token, error: 'RefreshAccessTokenError' };
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -166,6 +207,7 @@ export const authOptions: NextAuthOptions = {
           isActive: token.isActive,
         };
         (session as any).accessToken = token.accessToken;
+        (session as any).error = token.error;
       }
       return session;
     },

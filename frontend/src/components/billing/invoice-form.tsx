@@ -123,6 +123,9 @@ export function InvoiceForm({ bill, onSuccess, onCancel }: InvoiceFormProps) {
       // Calculate total amount (before tax and discount)
       const totalAmount = subtotal.toFixed(2);
 
+      // Clean billItems - remove id and billId for update
+      const cleanedBillItems = data.billItems.map(({ id, billId, ...item }: any) => item);
+
       const billData: Omit<Bill, 'id' | 'invoiceNumber' | 'createdAt' | 'updatedAt'> = {
         patientId: data.patientId,
         totalAmount,
@@ -133,7 +136,7 @@ export function InvoiceForm({ bill, onSuccess, onCancel }: InvoiceFormProps) {
         paymentStatus: data.paymentStatus as 'pending' | 'paid' | 'partial' | 'overdue',
         dueDate: data.dueDate,
         notes: data.notes,
-        billItems: data.billItems,
+        billItems: cleanedBillItems,
       };
 
       let result: Bill;
@@ -157,7 +160,7 @@ export function InvoiceForm({ bill, onSuccess, onCancel }: InvoiceFormProps) {
   const selectedPatient = patients.find(p => p.id === watch('patientId'));
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold">
           {isEditing ? 'Edit Invoice' : 'Create New Invoice'}

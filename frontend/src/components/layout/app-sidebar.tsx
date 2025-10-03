@@ -14,7 +14,9 @@ import {
   User2,
   BarChart3,
   ClipboardList,
-  Stethoscope
+  Stethoscope,
+  TestTube,
+  Package
 } from 'lucide-react';
 
 import {
@@ -86,6 +88,18 @@ const navigation = {
       title: 'Prescriptions',
       url: '/prescriptions',
       icon: Pill,
+      roles: ['admin', 'doctor', 'nurse']
+    },
+    {
+      title: 'Laboratory',
+      url: '/laboratory',
+      icon: TestTube,
+      roles: ['admin', 'doctor', 'nurse']
+    },
+    {
+      title: 'Pharmacy',
+      url: '/pharmacy',
+      icon: Package,
       roles: ['admin', 'doctor', 'nurse']
     },
     {

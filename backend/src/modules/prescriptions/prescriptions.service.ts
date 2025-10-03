@@ -178,8 +178,10 @@ export class PrescriptionsService {
       throw new BadRequestException('Medical record not found');
     }
 
-    // Check if medicine exists in our database
-    const medicine = MEDICINES_DATABASE.find(m => m.id === createPrescriptionDto.medicineId);
+    // Check if medicine exists in the actual database
+    const medicine = await this.prisma.medicine.findUnique({
+      where: { id: createPrescriptionDto.medicineId }
+    });
     if (!medicine) {
       throw new BadRequestException('Medicine not found');
     }
@@ -257,21 +259,17 @@ export class PrescriptionsService {
   }
 
   async searchMedicines(query: string, limit: number = 20): Promise<Medicine[]> {
-    if (!query || query.trim().length < 2) {
-      return [];
-    }
-
-    const searchTerm = query.toLowerCase().trim();
+    const searchTerm = query?.toLowerCase().trim();
 
     // Query the actual Medicine table from database
     const medicines = await this.prisma.medicine.findMany({
-      where: {
+      where: searchTerm && searchTerm.length >= 2 ? {
         OR: [
           { name: { contains: searchTerm } },
           { category: { contains: searchTerm } },
           { manufacturer: { contains: searchTerm } },
         ],
-      },
+      } : {},
       take: limit,
       select: {
         id: true,
@@ -344,12 +342,27 @@ export class PrescriptionsService {
       this.prisma.medicalPrescription.count({ where }),
     ]);
 
-    // Enhance with medicine information
+    // Enhance with medicine information from the database
+    const medicineIds = data.map(p => p.medicineId);
+    const medicines = await this.prisma.medicine.findMany({
+      where: { id: { in: medicineIds } }
+    });
+
+    const medicineMap = new Map(medicines.map(m => [m.id, m]));
+
     const enhancedData = data.map(prescription => {
-      const medicine = MEDICINES_DATABASE.find(m => m.id === prescription.medicineId);
+      const medicine = medicineMap.get(prescription.medicineId);
       return {
         ...prescription,
-        medicine: medicine || {
+        medicine: medicine ? {
+          id: medicine.id,
+          name: medicine.name,
+          category: medicine.category,
+          manufacturer: medicine.manufacturer,
+          dosageInfo: medicine.dosageInfo,
+          sideEffects: medicine.sideEffects,
+          interactions: ''
+        } : {
           id: prescription.medicineId,
           name: 'Unknown Medicine',
           category: 'Unknown',
@@ -468,12 +481,27 @@ export class PrescriptionsService {
       this.prisma.medicalPrescription.count({ where }),
     ]);
 
-    // Enhance with medicine information
+    // Enhance with medicine information from the database
+    const medicineIds = data.map(p => p.medicineId);
+    const medicines = await this.prisma.medicine.findMany({
+      where: { id: { in: medicineIds } }
+    });
+
+    const medicineMap = new Map(medicines.map(m => [m.id, m]));
+
     const enhancedData = data.map(prescription => {
-      const medicine = MEDICINES_DATABASE.find(m => m.id === prescription.medicineId);
+      const medicine = medicineMap.get(prescription.medicineId);
       return {
         ...prescription,
-        medicine: medicine || {
+        medicine: medicine ? {
+          id: medicine.id,
+          name: medicine.name,
+          category: medicine.category,
+          manufacturer: medicine.manufacturer,
+          dosageInfo: medicine.dosageInfo,
+          sideEffects: medicine.sideEffects,
+          interactions: ''
+        } : {
           id: prescription.medicineId,
           name: 'Unknown Medicine',
           category: 'Unknown',

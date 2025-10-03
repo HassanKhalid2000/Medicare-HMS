@@ -40,6 +40,26 @@ interface ApiDashboardStatistics {
       count: number;
     }>;
   };
+  admissions: {
+    total: number;
+    active: number;
+    discharged: number;
+    pending: number;
+    byWard: Array<{
+      ward: string;
+      count: number;
+    }>;
+  };
+  revenue: {
+    last6Months: Array<{
+      month: string;
+      revenue: string;
+    }>;
+    byPaymentMethod: Array<{
+      method: string;
+      revenue: string;
+    }>;
+  };
 }
 
 // Frontend compatible interface
@@ -73,6 +93,26 @@ export interface DashboardStatistics {
     billsCount: number;
     pendingCount: number;
     overdueCount: number;
+  };
+  admissions: {
+    total: number;
+    active: number;
+    discharged: number;
+    pending: number;
+    byWard: Array<{
+      ward: string;
+      count: number;
+    }>;
+  };
+  revenue: {
+    last6Months: Array<{
+      month: string;
+      revenue: string;
+    }>;
+    byPaymentMethod: Array<{
+      method: string;
+      revenue: string;
+    }>;
   };
 }
 
@@ -114,7 +154,9 @@ export const dashboardService = {
           billsCount: rawData.billing.totalBills,
           pendingCount: rawData.billing.paymentStatusBreakdown.find(s => s.status === 'pending')?.count || 0,
           overdueCount: rawData.billing.overdueCount
-        }
+        },
+        admissions: rawData.admissions,
+        revenue: rawData.revenue
       };
 
       return transformedData;

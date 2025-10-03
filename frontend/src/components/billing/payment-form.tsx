@@ -99,159 +99,136 @@ export function PaymentForm({ bill, onSuccess, onCancel }: PaymentFormProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Bill Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Invoice Information</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-sm text-muted-foreground">Invoice Number</Label>
-              <p className="font-medium">{bill.invoiceNumber}</p>
-            </div>
-            <div>
-              <Label className="text-sm text-muted-foreground">Patient</Label>
-              <p className="font-medium">
-                {bill.patient ? `${bill.patient.firstName} ${bill.patient.lastName}` : 'Unknown Patient'}
-              </p>
-            </div>
+    <div className="space-y-4">
+      {/* Bill Information - Compact */}
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <span className="text-muted-foreground">Invoice:</span> <span className="font-medium">{bill.invoiceNumber}</span>
           </div>
-
-          <Separator />
-
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span>Total Amount:</span>
-              <span className="font-medium">{formatAmount(bill.finalAmount || bill.totalAmount)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Amount Paid:</span>
-              <span className="font-medium">{formatAmount(bill.paidAmount || '0')}</span>
-            </div>
-            <div className="flex justify-between text-lg font-bold">
-              <span>Outstanding Balance:</span>
-              <span className="text-destructive">{formatAmount(outstandingBalance)}</span>
-            </div>
+          <div>
+            <span className="text-muted-foreground">Patient:</span> <span className="font-medium">
+              {bill.patient ? `${bill.patient.firstName} ${bill.patient.lastName}` : 'Unknown'}
+            </span>
           </div>
+        </div>
 
-          <div className="flex justify-between items-center">
-            <span>Current Status:</span>
-            <Badge className={getStatusColor(bill.paymentStatus || 'pending')}>
-              {(bill.paymentStatus || 'pending').charAt(0).toUpperCase() + (bill.paymentStatus || 'pending').slice(1)}
-            </Badge>
+        <Separator />
+
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span>Total Amount:</span>
+            <span className="font-medium">{formatAmount(bill.finalAmount || bill.totalAmount)}</span>
           </div>
-        </CardContent>
-      </Card>
+          <div className="flex justify-between">
+            <span>Amount Paid:</span>
+            <span className="font-medium">{formatAmount(bill.paidAmount || '0')}</span>
+          </div>
+          <div className="flex justify-between text-base font-bold">
+            <span>Outstanding Balance:</span>
+            <span className="text-destructive">{formatAmount(outstandingBalance)}</span>
+          </div>
+        </div>
+
+        <Separator />
+      </div>
 
       {/* Payment Form */}
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Process Payment</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="amount">Payment Amount *</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  max={maxPaymentAmount}
-                  {...register('amount', {
-                    required: 'Payment amount is required',
-                    min: { value: 0.01, message: 'Amount must be greater than 0' },
-                    max: { value: maxPaymentAmount, message: 'Amount cannot exceed outstanding balance' },
-                  })}
-                  placeholder="0.00"
-                />
-                {errors.amount && (
-                  <p className="text-sm text-destructive mt-1">{errors.amount.message}</p>
-                )}
-                <p className="text-sm text-muted-foreground mt-1">
-                  Maximum: {formatAmount(maxPaymentAmount)}
-                </p>
-              </div>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="amount" className="text-sm">Payment Amount *</Label>
+            <Input
+              id="amount"
+              type="number"
+              min="0.01"
+              step="0.01"
+              max={maxPaymentAmount}
+              {...register('amount', {
+                required: 'Payment amount is required',
+                min: { value: 0.01, message: 'Amount must be greater than 0' },
+                max: { value: maxPaymentAmount, message: 'Amount cannot exceed outstanding balance' },
+              })}
+              placeholder="0.00"
+              className="h-9"
+            />
+            {errors.amount && (
+              <p className="text-xs text-destructive mt-1">{errors.amount.message}</p>
+            )}
+          </div>
 
-              <div>
-                <Label htmlFor="paymentMethod">Payment Method *</Label>
-                <Select
-                  value={watch('paymentMethod')}
-                  onValueChange={(value) => setValue('paymentMethod', value as 'cash' | 'card' | 'bank_transfer' | 'insurance')}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="card">Card</SelectItem>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                    <SelectItem value="insurance">Insurance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+          <div>
+            <Label htmlFor="paymentMethod" className="text-sm">Payment Method *</Label>
+            <Select
+              value={watch('paymentMethod')}
+              onValueChange={(value) => setValue('paymentMethod', value as 'cash' | 'card' | 'bank_transfer' | 'insurance')}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cash">Cash</SelectItem>
+                <SelectItem value="card">Card</SelectItem>
+                <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                <SelectItem value="insurance">Insurance</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-            <div>
-              <Label htmlFor="notes">Payment Notes</Label>
-              <Textarea
-                id="notes"
-                {...register('notes')}
-                placeholder="Additional notes about this payment (optional)"
-                rows={3}
-              />
-            </div>
+        <div>
+          <Label htmlFor="notes" className="text-sm">Payment Notes</Label>
+          <Textarea
+            id="notes"
+            {...register('notes')}
+            placeholder="Additional notes (optional)"
+            rows={2}
+            className="text-sm"
+          />
+        </div>
 
-            {/* Payment Summary */}
-            <Card className="bg-muted/50">
-              <CardContent className="pt-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span>Payment Amount:</span>
-                    <span className="font-medium">{formatAmount(paymentAmount)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Remaining Balance:</span>
-                    <span className="font-medium">
-                      {formatAmount(Math.max(0, outstandingBalance - paymentAmount))}
-                    </span>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between font-bold">
-                    <span>New Status:</span>
-                    <Badge className={
-                      paymentAmount >= outstandingBalance
-                        ? 'bg-green-100 text-green-800'
-                        : paymentAmount > 0
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }>
-                      {paymentAmount >= outstandingBalance
-                        ? 'Paid'
-                        : paymentAmount > 0
-                        ? 'Partial'
-                        : 'Pending'}
-                    </Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </CardContent>
-        </Card>
+        {/* Payment Summary - Compact */}
+        <div className="bg-muted/50 rounded-lg p-3 space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span>Payment Amount:</span>
+            <span className="font-medium">{formatAmount(paymentAmount)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Remaining Balance:</span>
+            <span className="font-medium">
+              {formatAmount(Math.max(0, outstandingBalance - paymentAmount))}
+            </span>
+          </div>
+          <Separator className="my-1.5" />
+          <div className="flex justify-between items-center font-bold">
+            <span>New Status:</span>
+            <Badge className={
+              paymentAmount >= outstandingBalance
+                ? 'bg-green-100 text-green-800'
+                : paymentAmount > 0
+                ? 'bg-blue-100 text-blue-800'
+                : 'bg-yellow-100 text-yellow-800'
+            }>
+              {paymentAmount >= outstandingBalance
+                ? 'Paid'
+                : paymentAmount > 0
+                ? 'Partial'
+                : 'Pending'}
+            </Badge>
+          </div>
+        </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-4">
+        <div className="flex justify-end gap-3 pt-2">
           {onCancel && (
-            <Button type="button" variant="outline" onClick={onCancel}>
+            <Button type="button" variant="outline" onClick={onCancel} className="h-9">
               Cancel
             </Button>
           )}
           <Button
             type="submit"
             disabled={isLoading || paymentAmount <= 0 || paymentAmount > maxPaymentAmount}
+            className="h-9"
           >
             {isLoading ? 'Processing...' : `Process Payment ${formatAmount(paymentAmount)}`}
           </Button>

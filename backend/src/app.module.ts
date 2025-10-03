@@ -14,10 +14,10 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { MedicalRecordsModule } from './modules/medical-records/medical-records.module';
 import { DiagnosesModule } from './modules/diagnoses/diagnoses.module';
 import { PrescriptionsModule } from './modules/prescriptions/prescriptions.module';
-// import { LabResultsModule } from './modules/lab-results/lab-results.module';
+import { LaboratoryModule } from './modules/laboratory/laboratory.module';
 import { AdmissionsModule } from './modules/admissions/admissions.module';
-import { TimelineModule } from './modules/timeline/timeline.module';
 import { MedicalReportsModule } from './modules/medical-reports/medical-reports.module';
+import { PharmacyModule } from './modules/pharmacy/pharmacy.module';
 
 @Module({
   imports: [
@@ -45,9 +45,9 @@ import { MedicalReportsModule } from './modules/medical-reports/medical-reports.
     MedicalRecordsModule,
     DiagnosesModule,
     PrescriptionsModule,
-    // LabResultsModule,
+    LaboratoryModule,
+    PharmacyModule,
     AdmissionsModule,
-    TimelineModule,
     MedicalReportsModule,
   ],
 })

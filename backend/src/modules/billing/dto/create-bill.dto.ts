@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsDecimal, IsArray, ValidateNested, IsDate } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsDecimal, IsArray, ValidateNested, IsDate, IsInt, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { PaymentMethod, PaymentStatus } from '@prisma/client';
@@ -9,6 +9,8 @@ export class BillItemDto {
   description: string;
 
   @ApiProperty({ description: 'Quantity', example: 1 })
+  @IsInt()
+  @Min(1)
   @Type(() => Number)
   quantity: number;
 

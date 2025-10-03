@@ -1,522 +1,350 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Download, Eye, FileText, BarChart3, Users, Calendar, Stethoscope, Activity, ClipboardList, DollarSign, FileCheck, Trash2, RefreshCw } from 'lucide-react';
-import Link from 'next/link';
-import { api } from '@/lib/api/base';
-
-interface MedicalReport {
-  id: string;
-  title: string;
-  description?: string;
-  type: ReportType;
-  format: ReportFormat;
-  status: ReportStatus;
-  filePath?: string;
-  fileSize?: number;
-  requestedBy: string;
-  expiresAt: string;
-  createdAt: string;
-  updatedAt: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-  };
-}
-
-interface ReportStats {
-  total: number;
-  pending: number;
-  completed: number;
-  failed: number;
-  byType: Array<{
-    type: ReportType;
-    count: number;
-  }>;
-}
-
-enum ReportType {
-  PATIENT_SUMMARY = 'PATIENT_SUMMARY',
-  MEDICAL_HISTORY = 'MEDICAL_HISTORY',
-  PRESCRIPTION_REPORT = 'PRESCRIPTION_REPORT',
-  VITAL_SIGNS_REPORT = 'VITAL_SIGNS_REPORT',
-  LAB_RESULTS_REPORT = 'LAB_RESULTS_REPORT',
-  ADMISSION_REPORT = 'ADMISSION_REPORT',
-  FINANCIAL_REPORT = 'FINANCIAL_REPORT',
-  APPOINTMENT_REPORT = 'APPOINTMENT_REPORT',
-  DIAGNOSIS_REPORT = 'DIAGNOSIS_REPORT',
-  CUSTOM_REPORT = 'CUSTOM_REPORT',
-}
-
-enum ReportFormat {
-  PDF = 'PDF',
-  CSV = 'CSV',
-  EXCEL = 'EXCEL',
-  JSON = 'JSON',
-}
-
-enum ReportStatus {
-  PENDING = 'PENDING',
-  PROCESSING = 'PROCESSING',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
-  EXPIRED = 'EXPIRED',
-}
-
-const REPORT_TYPES = [
-  { value: 'PATIENT_SUMMARY', label: 'Patient Summary', icon: Users, color: 'bg-blue-100 text-blue-800', description: 'Comprehensive patient overview' },
-  { value: 'MEDICAL_HISTORY', label: 'Medical History', icon: ClipboardList, color: 'bg-green-100 text-green-800', description: 'Patient medical history report' },
-  { value: 'PRESCRIPTION_REPORT', label: 'Prescription Report', icon: FileText, color: 'bg-purple-100 text-purple-800', description: 'Medication and prescription data' },
-  { value: 'VITAL_SIGNS_REPORT', label: 'Vital Signs Report', icon: Activity, color: 'bg-red-100 text-red-800', description: 'Patient vital signs analysis' },
-  { value: 'LAB_RESULTS_REPORT', label: 'Lab Results Report', icon: FileCheck, color: 'bg-teal-100 text-teal-800', description: 'Laboratory test results' },
-  { value: 'ADMISSION_REPORT', label: 'Admission Report', icon: Stethoscope, color: 'bg-indigo-100 text-indigo-800', description: 'Hospital admission statistics' },
-  { value: 'FINANCIAL_REPORT', label: 'Financial Report', icon: DollarSign, color: 'bg-yellow-100 text-yellow-800', description: 'Billing and payment analysis' },
-  { value: 'APPOINTMENT_REPORT', label: 'Appointment Report', icon: Calendar, color: 'bg-pink-100 text-pink-800', description: 'Appointment scheduling data' },
-  { value: 'DIAGNOSIS_REPORT', label: 'Diagnosis Report', icon: BarChart3, color: 'bg-orange-100 text-orange-800', description: 'Diagnosis trends and statistics' },
-  { value: 'CUSTOM_REPORT', label: 'Custom Report', icon: FileText, color: 'bg-gray-100 text-gray-800', description: 'Custom data analysis' },
-] as const;
-
-const STATUS_COLORS = {
-  PENDING: 'bg-yellow-100 text-yellow-800',
-  PROCESSING: 'bg-blue-100 text-blue-800',
-  COMPLETED: 'bg-green-100 text-green-800',
-  FAILED: 'bg-red-100 text-red-800',
-  EXPIRED: 'bg-gray-100 text-gray-800',
-};
+import { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  medicalReportsService,
+  MedicalReport,
+  ReportType,
+  ReportStatus,
+  getReportTypeLabel,
+  getReportStatusLabel,
+  getReportFormatLabel,
+} from '@/services/medical-reports';
+import { toast } from 'sonner';
+import { Search, Plus, Eye, Edit, Trash2, Download, FileText } from 'lucide-react';
+import { format } from 'date-fns';
+import { ReportForm } from '@/components/medical-reports/report-form';
+import { ReportPreview } from '@/components/medical-reports/report-preview';
 
 export default function MedicalReportsPage() {
   const [reports, setReports] = useState<MedicalReport[]>([]);
-  const [stats, setStats] = useState<ReportStats>({ total: 0, pending: 0, completed: 0, failed: 0, byType: [] });
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState<ReportType | ''>('');
-  const [statusFilter, setStatusFilter] = useState<ReportStatus | ''>('');
-  const [formatFilter, setFormatFilter] = useState<ReportFormat | ''>('');
+  const [total, setTotal] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<MedicalReport | null>(null);
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [showFormDialog, setShowFormDialog] = useState(false);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+
+  const limit = 10;
+
+  const loadReports = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const response = await medicalReportsService.getReports({
+        page: currentPage,
+        limit,
+        search: searchTerm || undefined,
+        type: typeFilter ? (typeFilter as ReportType) : undefined,
+        status: statusFilter ? (statusFilter as ReportStatus) : undefined,
+      });
+      setReports(response.data);
+      setTotal(response.meta.total);
+    } catch (error) {
+      console.error('Failed to load reports:', error);
+      toast.error('Failed to load medical reports');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentPage, searchTerm, typeFilter, statusFilter]);
 
   useEffect(() => {
-    fetchReports();
-    fetchStats();
-  }, [searchQuery, typeFilter, statusFilter, formatFilter]);
+    loadReports();
+  }, [loadReports]);
 
-  const fetchReports = async () => {
+  const handleSearch = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
+
+  const handleViewDetails = async (report: MedicalReport) => {
     try {
-      setLoading(true);
-      const params = new URLSearchParams();
-
-      if (searchQuery) params.append('search', searchQuery);
-      if (typeFilter) params.append('type', typeFilter);
-      if (statusFilter) params.append('status', statusFilter);
-      if (formatFilter) params.append('format', formatFilter);
-
-      const response = await api.get(`/medical-reports?${params.toString()}`);
-      const data = response.data;
-
-      if (data.success) {
-        setReports(data.data.data || []);
-      }
+      const response = await medicalReportsService.getReport(report.id);
+      setSelectedReport(response.data);
+      setShowPreviewDialog(true);
     } catch (error) {
-      console.error('Error fetching reports:', error);
-    } finally {
-      setLoading(false);
+      toast.error('Failed to load report details');
     }
   };
 
-  const fetchStats = async () => {
+  const handleEdit = (report: MedicalReport) => {
+    setSelectedReport(report);
+    setIsEditing(true);
+    setShowFormDialog(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this report?')) return;
+
     try {
-      const response = await api.get('/medical-reports/stats/summary');
-      const data = response.data;
-
-      if (data.success) {
-        setStats(data.data);
-      }
+      await medicalReportsService.deleteReport(id);
+      toast.success('Report deleted successfully');
+      loadReports();
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      toast.error('Failed to delete report');
     }
   };
 
-  const handleDownload = async (reportId: string) => {
-    try {
-      const response = await api.get(`/medical-reports/${reportId}/download`, {
-        responseType: 'blob'
-      });
-
-      const blob = response.data;
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = response.headers['content-disposition']?.split('filename=')[1] || 'report';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error downloading report:', error);
-    }
+  const handleDownload = async (report: MedicalReport) => {
+    // Show preview dialog which has download/print buttons
+    setSelectedReport(report);
+    setShowPreviewDialog(true);
   };
 
-  const handleRegenerate = async (reportId: string) => {
-    try {
-      await api.post(`/medical-reports/${reportId}/regenerate`);
-      await fetchReports();
-    } catch (error) {
-      console.error('Error regenerating report:', error);
-    }
-  };
 
-  const handleDelete = async (reportId: string) => {
-    if (window.confirm('Are you sure you want to delete this report?')) {
-      try {
-        await api.delete(`/medical-reports/${reportId}`);
-        await fetchReports();
-        await fetchStats();
-      } catch (error) {
-        console.error('Error deleting report:', error);
-      }
-    }
-  };
-
-  const formatFileSize = (bytes?: number) => {
-    if (!bytes || bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const getReportTypeInfo = (type: ReportType) => {
-    return REPORT_TYPES.find(t => t.value === type) || REPORT_TYPES[REPORT_TYPES.length - 1];
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  const totalPages = Math.ceil(total / limit);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="sm:flex sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Medical Reports</h1>
-          <p className="mt-2 text-sm text-gray-700">
-            Generate, manage, and download comprehensive medical reports
-          </p>
-        </div>
-        <div className="mt-4 sm:mt-0">
-          <Link
-            href="/medical-reports/new"
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Generate Report
-          </Link>
-        </div>
+      <div>
+        <h2 className="text-3xl font-bold tracking-tight">Medical Reports</h2>
+        <p className="text-muted-foreground">Generate and manage medical reports</p>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <FileText className="h-6 w-6 text-gray-400" />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Total Reports</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats.total}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <RefreshCw className="h-6 w-6 text-yellow-400" />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Pending</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats.pending}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <FileCheck className="h-6 w-6 text-green-400" />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Completed</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats.completed}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Trash2 className="h-6 w-6 text-red-400" />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Failed</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats.failed}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Report Types */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-          <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Report Generation</h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {REPORT_TYPES.slice(0, 5).map((reportType) => {
-              const Icon = reportType.icon;
-              return (
-                <Link
-                  key={reportType.value}
-                  href={`/medical-reports/new?type=${reportType.value}`}
-                  className="relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm flex items-center space-x-3 hover:border-gray-400 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
-                >
-                  <div className="flex-shrink-0">
-                    <Icon className="h-6 w-6 text-gray-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="absolute inset-0" aria-hidden="true" />
-                    <p className="text-sm font-medium text-gray-900">{reportType.label}</p>
-                    <p className="text-sm text-gray-500 truncate">{reportType.description}</p>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-            <div>
-              <label htmlFor="search" className="block text-sm font-medium text-gray-700">
-                Search Reports
-              </label>
-              <div className="mt-1 relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  id="search"
-                  className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
+      <Card>
+        <CardHeader>
+          <CardTitle>Reports</CardTitle>
+          <CardDescription>Search and filter medical reports</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4">
+            <div className="flex gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
                   placeholder="Search by title or description..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="pl-10"
                 />
               </div>
-            </div>
-
-            <div>
-              <label htmlFor="type-filter" className="block text-sm font-medium text-gray-700">
-                Report Type
-              </label>
-              <select
-                id="type-filter"
-                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as ReportType | '')}
-              >
-                <option value="">All Types</option>
-                {REPORT_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="status-filter" className="block text-sm font-medium text-gray-700">
-                Status
-              </label>
-              <select
-                id="status-filter"
-                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as ReportStatus | '')}
-              >
-                <option value="">All Statuses</option>
-                <option value="PENDING">Pending</option>
-                <option value="PROCESSING">Processing</option>
-                <option value="COMPLETED">Completed</option>
-                <option value="FAILED">Failed</option>
-                <option value="EXPIRED">Expired</option>
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="format-filter" className="block text-sm font-medium text-gray-700">
-                Format
-              </label>
-              <select
-                id="format-filter"
-                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                value={formatFilter}
-                onChange={(e) => setFormatFilter(e.target.value as ReportFormat | '')}
-              >
-                <option value="">All Formats</option>
-                <option value="PDF">PDF</option>
-                <option value="CSV">CSV</option>
-                <option value="EXCEL">Excel</option>
-                <option value="JSON">JSON</option>
-              </select>
+              <Select value={typeFilter || 'all'} onValueChange={(v) => setTypeFilter(v === 'all' ? '' : v)}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Filter by type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  {Object.values(ReportType).map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {getReportTypeLabel(type)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  {Object.values(ReportStatus).map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {getReportStatusLabel(status)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={() => { setSelectedReport(null); setIsEditing(false); setShowFormDialog(true); }}>
+                <Plus className="mr-2 h-4 w-4" />
+                New Report
+              </Button>
             </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Reports Table */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        <div className="px-4 py-5 sm:px-6">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">
-            Reports ({reports.length})
-          </h3>
-        </div>
-
-        {reports.length === 0 ? (
-          <div className="text-center py-12">
-            <FileText className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No reports</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Get started by generating your first report.
-            </p>
-            <div className="mt-6">
-              <Link
-                href="/medical-reports/new"
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Generate Report
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <ul className="divide-y divide-gray-200">
-            {reports.map((report) => {
-              const typeInfo = getReportTypeInfo(report.type);
-              const TypeIcon = typeInfo.icon;
-
-              return (
-                <li key={report.id}>
-                  <div className="px-4 py-4 flex items-center justify-between">
-                    <div className="flex items-center min-w-0 flex-1">
-                      <div className="flex-shrink-0">
-                        <TypeIcon className="h-6 w-6 text-gray-400" />
-                      </div>
-                      <div className="ml-4 min-w-0 flex-1">
-                        <div className="flex items-center">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {report.title}
-                          </p>
-                          <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${typeInfo.color}`}>
-                            {typeInfo.label}
-                          </span>
-                          <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[report.status]}`}>
-                            {report.status}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex items-center text-sm text-gray-500">
-                          <span className="truncate">
-                            Requested by: {report.user.name}
-                          </span>
-                          <span className="mx-2">•</span>
-                          <span>Format: {report.format}</span>
-                          {report.fileSize && (
-                            <>
-                              <span className="mx-2">•</span>
-                              <span>{formatFileSize(report.fileSize)}</span>
-                            </>
-                          )}
-                          <span className="mx-2">•</span>
-                          <span>Created: {formatDate(report.createdAt)}</span>
-                        </div>
-                        {report.description && (
-                          <p className="mt-1 text-sm text-gray-500 truncate">
-                            {report.description}
-                          </p>
-                        )}
-                      </div>
+      <Card>
+        <CardContent className="pt-6">
+          {isLoading ? (
+            <div className="text-center py-8">Loading...</div>
+          ) : reports.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">No reports found</div>
+          ) : (
+            <div className="space-y-4">
+              {reports.map((report) => (
+                <div key={report.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-3">
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                      <h3 className="font-semibold">{report.title}</h3>
+                      <Badge variant="outline">{getReportTypeLabel(report.type)}</Badge>
+                      <Badge variant="secondary">{getReportFormatLabel(report.format)}</Badge>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      {report.status === 'COMPLETED' && report.filePath && (
-                        <button
-                          onClick={() => handleDownload(report.id)}
-                          className="p-1 text-gray-400 hover:text-gray-600"
-                          title="Download"
-                        >
-                          <Download className="h-4 w-4" />
-                        </button>
+                    <div className="text-sm text-muted-foreground">
+                      {report.description && <span>{report.description} • </span>}
+                      <span>Requested: {format(new Date(report.requestedAt), 'MMM dd, yyyy HH:mm')}</span>
+                      {report.completedAt && (
+                        <>
+                          {' • '}
+                          <span>Completed: {format(new Date(report.completedAt), 'MMM dd, yyyy HH:mm')}</span>
+                        </>
                       )}
-                      <Link
-                        href={`/medical-reports/${report.id}`}
-                        className="p-1 text-gray-400 hover:text-gray-600"
-                        title="View Details"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Link>
-                      {(report.status === 'FAILED' || report.status === 'EXPIRED') && (
-                        <button
-                          onClick={() => handleRegenerate(report.id)}
-                          className="p-1 text-gray-400 hover:text-blue-600"
-                          title="Regenerate"
-                        >
-                          <RefreshCw className="h-4 w-4" />
-                        </button>
+                      {report.requestedByUser && (
+                        <>
+                          {' • '}
+                          <span>By: {report.requestedByUser.fullName}</span>
+                        </>
                       )}
-                      <button
-                        onClick={() => handleDelete(report.id)}
-                        className="p-1 text-gray-400 hover:text-red-600"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
                     </div>
                   </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => handleViewDetails(report)}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDownload(report)}>
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleEdit(report)}>
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(report.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-6">
+              <div className="text-sm text-muted-foreground">
+                Showing {(currentPage - 1) * limit + 1} to {Math.min(currentPage * limit, total)} of {total} reports
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                  Previous
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Report Details</DialogTitle>
+          </DialogHeader>
+          {selectedReport && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Title</label>
+                  <p className="text-sm">{selectedReport.title}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Type</label>
+                  <p className="text-sm">{getReportTypeLabel(selectedReport.type)}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Format</label>
+                  <p className="text-sm">{getReportFormatLabel(selectedReport.format)}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Requested At</label>
+                  <p className="text-sm">{format(new Date(selectedReport.requestedAt), 'MMM dd, yyyy HH:mm')}</p>
+                </div>
+                {selectedReport.completedAt && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Completed At</label>
+                    <p className="text-sm">{format(new Date(selectedReport.completedAt), 'MMM dd, yyyy HH:mm')}</p>
+                  </div>
+                )}
+                {selectedReport.requestedByUser && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Requested By</label>
+                    <p className="text-sm">{selectedReport.requestedByUser.fullName}</p>
+                  </div>
+                )}
+                {selectedReport.fileName && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">File Name</label>
+                    <p className="text-sm">{selectedReport.fileName}</p>
+                  </div>
+                )}
+              </div>
+              {selectedReport.description && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Description</label>
+                  <p className="text-sm mt-1">{selectedReport.description}</p>
+                </div>
+              )}
+              {selectedReport.filters && Object.keys(selectedReport.filters).length > 0 && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Filters</label>
+                  <div className="mt-1 p-3 bg-muted rounded-md">
+                    <pre className="text-xs overflow-auto">{JSON.stringify(selectedReport.filters, null, 2)}</pre>
+                  </div>
+                </div>
+              )}
+              {selectedReport.parameters && Object.keys(selectedReport.parameters).length > 0 && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Parameters</label>
+                  <div className="mt-1 p-3 bg-muted rounded-md">
+                    <pre className="text-xs overflow-auto">{JSON.stringify(selectedReport.parameters, null, 2)}</pre>
+                  </div>
+                </div>
+              )}
+              {selectedReport.errorMessage && (
+                <div>
+                  <label className="text-sm font-medium text-destructive">Error Message</label>
+                  <p className="text-sm text-destructive mt-1">{selectedReport.errorMessage}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{isEditing ? 'Edit Report' : 'Generate New Report'}</DialogTitle>
+            <DialogDescription>
+              {isEditing ? 'Update report information' : 'Create a new medical report'}
+            </DialogDescription>
+          </DialogHeader>
+          <ReportForm
+            report={selectedReport}
+            onSuccess={(newReport) => {
+              setShowFormDialog(false);
+              setSelectedReport(newReport);
+              setIsEditing(false);
+              loadReports();
+              // Show preview immediately after creating
+              if (!isEditing) {
+                setShowPreviewDialog(true);
+              }
+            }}
+            onCancel={() => {
+              setShowFormDialog(false);
+              setSelectedReport(null);
+              setIsEditing(false);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview Dialog */}
+      <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          {selectedReport && <ReportPreview report={selectedReport} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
