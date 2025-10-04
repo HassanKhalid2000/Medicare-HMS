@@ -268,7 +268,7 @@ export class AuthService {
         email: data.email,
         passwordHash,
         fullName: data.fullName,
-        role: data.role,
+        role: data.role as any,
         phone: data.phone,
         department: data.department,
         employeeId: data.employeeId,
@@ -279,10 +279,7 @@ export class AuthService {
     // Get role from database to assign permissions
     const roleRecord = await this.prisma.role.findFirst({
       where: {
-        name: {
-          equals: data.role.charAt(0).toUpperCase() + data.role.slice(1), // Capitalize first letter (admin -> Admin)
-          mode: 'insensitive',
-        },
+        name: data.role.charAt(0).toUpperCase() + data.role.slice(1), // Capitalize first letter (admin -> Admin)
       },
     });
 

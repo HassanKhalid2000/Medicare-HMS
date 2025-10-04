@@ -148,15 +148,16 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({
-  userRole = 'admin',
+  userRole,
   user = {
-    name: 'Hassan Khalid',
-    email: 'hassan.khalid@medicore.com'
+    name: 'User',
+    email: 'user@medicore.com'
   }
 }: AppSidebarProps) {
   const pathname = usePathname();
 
   const filterItemsByRole = (items: typeof navigation.main) => {
+    if (!userRole) return [];
     return items.filter(item => item.roles.includes(userRole));
   };
 
