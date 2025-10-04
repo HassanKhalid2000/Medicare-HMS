@@ -68,7 +68,11 @@
       "Bash(open http://localhost:3000/settings)",
       "Read(//Users/hassankhalid/.npm/_logs/**)",
       "Bash(open http://localhost:3000/permissions)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(for:*)",
+      "Bash(do echo \"=== $dir ===\")",
+      "Bash(done)",
+      "Bash(open http://localhost:3000/medical-records)"
     ],
     "deny": [],
     "ask": []

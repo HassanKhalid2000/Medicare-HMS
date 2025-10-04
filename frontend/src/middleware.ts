@@ -20,32 +20,38 @@ export default withAuth(
         return NextResponse.next();
       }
 
-      // Define role-based access control
+      // Define role-based access control (matches sidebar navigation)
       const roleRoutes = {
         doctor: [
           '/dashboard',
           '/patients',
           '/appointments',
-          '/consultations',
+          '/medical-records',
+          '/diagnoses',
           '/prescriptions',
-          '/lab-results',
-          '/reports',
+          '/laboratory',
+          '/pharmacy',
+          '/admissions',
+          '/medical-reports',
         ],
         nurse: [
           '/dashboard',
           '/patients',
+          '/appointments',
+          '/medical-records',
+          '/diagnoses',
+          '/prescriptions',
+          '/laboratory',
+          '/pharmacy',
           '/admissions',
-          '/vitals',
-          '/medications',
-          '/lab-orders',
+          '/medical-reports',
         ],
         receptionist: [
           '/dashboard',
-          '/appointments',
-          '/patient-registration',
-          '/billing',
           '/patients',
-          '/reports',
+          '/doctors',
+          '/appointments',
+          '/billing',
         ],
       };
 
