@@ -196,6 +196,10 @@ model User {
   recordedProgress      TreatmentProgress[]     @relation("TreatmentProgressRecordedBy")
   conductedReviews      TreatmentReview[]       @relation("TreatmentReviewReviewedBy")
 
+  // Permissions & Groups Relations
+  userRoles             UserRole_New[]
+  userGroups            UserGroup[]
+
   @@index([email])
   @@index([employeeId])
   @@index([role])
@@ -1357,4 +1361,168 @@ model TreatmentReview {
   @@index([reviewDate])
   @@index([reviewType])
   @@map("treatment_reviews")
+}
+
+// System Settings
+enum SettingType {
+  SYSTEM
+  USER
+  HOSPITAL
+}
+
+model Setting {
+  id        String      @id @default(uuid())
+  type      SettingType
+  category  String      @db.VarChar(100) // profile, hospital, appearance, notification, etc.
+  key       String      @db.VarChar(255)
+  value     Json        // Flexible JSON value
+  userId    String?     @map("user_id") // For user-specific settings
+  isPublic  Boolean     @default(false) @map("is_public")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  @@unique([type, category, key, userId])
+  @@index([type])
+  @@index([category])
+  @@index([userId])
+  @@map("settings")
+}
+
+// Permissions & Groups System
+enum PermissionAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  EXECUTE
+}
+
+enum ResourceType {
+  PATIENT
+  DOCTOR
+  APPOINTMENT
+  MEDICAL_RECORD
+  PRESCRIPTION
+  LAB_TEST
+  BILLING
+  ADMISSION
+  USER
+  SETTINGS
+  REPORTS
+  PHARMACY
+  ALL
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  name        String           @unique @db.VarChar(100)
+  description String?          @db.Text
+  resource    ResourceType
+  action      PermissionAction
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  roles       RolePermission[]
+  groups      GroupPermission[]
+
+  @@unique([resource, action])
+  @@index([resource])
+  @@index([action])
+  @@map("permissions")
+}
+
+model Role {
+  id          String     @id @default(uuid())
+  name        String     @unique @db.VarChar(100)
+  description String?    @db.Text
+  isSystem    Boolean    @default(false) @map("is_system") // System roles can't be deleted
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  permissions RolePermission[]
+  userRoles   UserRole_New[]
+
+  @@index([name])
+  @@map("roles")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  // Relations
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model Group {
+  id          String    @id @default(uuid())
+  name        String    @unique @db.VarChar(100)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  users       UserGroup[]
+  permissions GroupPermission[]
+
+  @@index([name])
+  @@map("groups")
+}
+
+model GroupPermission {
+  id           String     @id @default(uuid())
+  groupId      String     @map("group_id")
+  permissionId String     @map("permission_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  // Relations
+  group        Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, permissionId])
+  @@index([groupId])
+  @@index([permissionId])
+  @@map("group_permissions")
+}
+
+model UserRole_New {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  roleId    String   @map("role_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model UserGroup {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  groupId   String   @map("group_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
+  @@map("user_groups")
 }

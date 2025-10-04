@@ -442,8 +442,10 @@ async function main() {
   // Create demo bills
   console.log('💰 Creating demo bills...');
 
-  const bill = await prisma.bill.create({
-    data: {
+  const bill = await prisma.bill.upsert({
+    where: { invoiceNumber: 'INV-2024-0922-001' },
+    update: {},
+    create: {
       invoiceNumber: 'INV-2024-0922-001',
       patientId: patients[0].id,
       totalAmount: 200.00,
@@ -1179,6 +1181,203 @@ async function main() {
     },
   });
 
+  // Create permissions and roles
+  console.log('🔐 Creating permissions and roles...');
+
+  const { ResourceType, PermissionAction } = await import('@prisma/client');
+
+  // Define all permissions based on resources
+  const permissionsData = [
+    // Patient permissions
+    { name: 'Create Patient', resource: ResourceType.PATIENT, action: PermissionAction.CREATE },
+    { name: 'View Patient', resource: ResourceType.PATIENT, action: PermissionAction.READ },
+    { name: 'Update Patient', resource: ResourceType.PATIENT, action: PermissionAction.UPDATE },
+    { name: 'Delete Patient', resource: ResourceType.PATIENT, action: PermissionAction.DELETE },
+
+    // Doctor permissions
+    { name: 'Create Doctor', resource: ResourceType.DOCTOR, action: PermissionAction.CREATE },
+    { name: 'View Doctor', resource: ResourceType.DOCTOR, action: PermissionAction.READ },
+    { name: 'Update Doctor', resource: ResourceType.DOCTOR, action: PermissionAction.UPDATE },
+    { name: 'Delete Doctor', resource: ResourceType.DOCTOR, action: PermissionAction.DELETE },
+
+    // Appointment permissions
+    { name: 'Create Appointment', resource: ResourceType.APPOINTMENT, action: PermissionAction.CREATE },
+    { name: 'View Appointment', resource: ResourceType.APPOINTMENT, action: PermissionAction.READ },
+    { name: 'Update Appointment', resource: ResourceType.APPOINTMENT, action: PermissionAction.UPDATE },
+    { name: 'Delete Appointment', resource: ResourceType.APPOINTMENT, action: PermissionAction.DELETE },
+
+    // Medical Record permissions
+    { name: 'Create Medical Record', resource: ResourceType.MEDICAL_RECORD, action: PermissionAction.CREATE },
+    { name: 'View Medical Record', resource: ResourceType.MEDICAL_RECORD, action: PermissionAction.READ },
+    { name: 'Update Medical Record', resource: ResourceType.MEDICAL_RECORD, action: PermissionAction.UPDATE },
+    { name: 'Delete Medical Record', resource: ResourceType.MEDICAL_RECORD, action: PermissionAction.DELETE },
+
+    // Medical Record also includes diagnoses
+    // { name: 'Create Diagnosis', resource: ResourceType.DIAGNOSIS, action: PermissionAction.CREATE },
+    // { name: 'View Diagnosis', resource: ResourceType.DIAGNOSIS, action: PermissionAction.READ },
+    // { name: 'Update Diagnosis', resource: ResourceType.DIAGNOSIS, action: PermissionAction.UPDATE },
+    // { name: 'Delete Diagnosis', resource: ResourceType.DIAGNOSIS, action: PermissionAction.DELETE },
+
+    // Prescription permissions
+    { name: 'Create Prescription', resource: ResourceType.PRESCRIPTION, action: PermissionAction.CREATE },
+    { name: 'View Prescription', resource: ResourceType.PRESCRIPTION, action: PermissionAction.READ },
+    { name: 'Update Prescription', resource: ResourceType.PRESCRIPTION, action: PermissionAction.UPDATE },
+    { name: 'Delete Prescription', resource: ResourceType.PRESCRIPTION, action: PermissionAction.DELETE },
+
+    // Laboratory permissions (uses LAB_TEST in schema)
+    { name: 'Create Lab Test', resource: ResourceType.LAB_TEST, action: PermissionAction.CREATE },
+    { name: 'View Lab Test', resource: ResourceType.LAB_TEST, action: PermissionAction.READ },
+    { name: 'Update Lab Test', resource: ResourceType.LAB_TEST, action: PermissionAction.UPDATE },
+    { name: 'Delete Lab Test', resource: ResourceType.LAB_TEST, action: PermissionAction.DELETE },
+
+    // Pharmacy permissions
+    { name: 'Create Pharmacy Record', resource: ResourceType.PHARMACY, action: PermissionAction.CREATE },
+    { name: 'View Pharmacy Record', resource: ResourceType.PHARMACY, action: PermissionAction.READ },
+    { name: 'Update Pharmacy Record', resource: ResourceType.PHARMACY, action: PermissionAction.UPDATE },
+    { name: 'Delete Pharmacy Record', resource: ResourceType.PHARMACY, action: PermissionAction.DELETE },
+
+    // Admission permissions
+    { name: 'Create Admission', resource: ResourceType.ADMISSION, action: PermissionAction.CREATE },
+    { name: 'View Admission', resource: ResourceType.ADMISSION, action: PermissionAction.READ },
+    { name: 'Update Admission', resource: ResourceType.ADMISSION, action: PermissionAction.UPDATE },
+    { name: 'Delete Admission', resource: ResourceType.ADMISSION, action: PermissionAction.DELETE },
+
+    // Billing permissions
+    { name: 'Create Billing', resource: ResourceType.BILLING, action: PermissionAction.CREATE },
+    { name: 'View Billing', resource: ResourceType.BILLING, action: PermissionAction.READ },
+    { name: 'Update Billing', resource: ResourceType.BILLING, action: PermissionAction.UPDATE },
+    { name: 'Delete Billing', resource: ResourceType.BILLING, action: PermissionAction.DELETE },
+
+    // Report permissions (uses REPORTS in schema)
+    { name: 'Generate Report', resource: ResourceType.REPORTS, action: PermissionAction.EXECUTE },
+    { name: 'View Report', resource: ResourceType.REPORTS, action: PermissionAction.READ },
+
+    // Settings permissions
+    { name: 'View Settings', resource: ResourceType.SETTINGS, action: PermissionAction.READ },
+    { name: 'Update Settings', resource: ResourceType.SETTINGS, action: PermissionAction.UPDATE },
+
+    // User permissions
+    { name: 'Create User', resource: ResourceType.USER, action: PermissionAction.CREATE },
+    { name: 'View User', resource: ResourceType.USER, action: PermissionAction.READ },
+    { name: 'Update User', resource: ResourceType.USER, action: PermissionAction.UPDATE },
+    { name: 'Delete User', resource: ResourceType.USER, action: PermissionAction.DELETE },
+  ];
+
+  // Create permissions
+  const permissions = await Promise.all(
+    permissionsData.map(async (perm) => {
+      return await prisma.permission.upsert({
+        where: {
+          resource_action: {
+            resource: perm.resource,
+            action: perm.action,
+          },
+        },
+        update: {},
+        create: perm,
+      });
+    })
+  );
+  console.log(`✅ Created ${permissions.length} permissions`);
+
+  // Helper function to get permission IDs
+  const getPermissionIds = (resources: any[], actions?: any[]) => {
+    return permissions
+      .filter((p) => {
+        const resourceMatch = resources.includes(p.resource);
+        const actionMatch = actions ? actions.includes(p.action) : true;
+        return resourceMatch && actionMatch;
+      })
+      .map((p) => p.id);
+  };
+
+  // Define roles with their permissions
+  const rolesData = [
+    {
+      name: 'Admin',
+      description: 'Full system access',
+      isSystem: true,
+      permissionIds: permissions.map((p) => p.id), // All permissions
+    },
+    {
+      name: 'Doctor',
+      description: 'Doctor access to medical records and patient care',
+      isSystem: true,
+      permissionIds: getPermissionIds([
+        ResourceType.PATIENT,
+        ResourceType.APPOINTMENT,
+        ResourceType.MEDICAL_RECORD,
+        ResourceType.PRESCRIPTION,
+        ResourceType.LAB_TEST,
+        ResourceType.PHARMACY,
+        ResourceType.ADMISSION,
+        ResourceType.REPORTS,
+      ]).concat(
+        getPermissionIds([ResourceType.DOCTOR], [PermissionAction.READ])
+      ),
+    },
+    {
+      name: 'Nurse',
+      description: 'Nurse access to patient care and medical records',
+      isSystem: true,
+      permissionIds: getPermissionIds([
+        ResourceType.PATIENT,
+        ResourceType.APPOINTMENT,
+        ResourceType.MEDICAL_RECORD,
+        ResourceType.PRESCRIPTION,
+        ResourceType.LAB_TEST,
+        ResourceType.PHARMACY,
+        ResourceType.ADMISSION,
+      ], [PermissionAction.READ, PermissionAction.UPDATE]).concat(
+        getPermissionIds([ResourceType.DOCTOR], [PermissionAction.READ])
+      ),
+    },
+    {
+      name: 'Receptionist',
+      description: 'Receptionist access to appointments and billing',
+      isSystem: true,
+      permissionIds: getPermissionIds([
+        ResourceType.PATIENT,
+        ResourceType.APPOINTMENT,
+        ResourceType.BILLING,
+      ]).concat(
+        getPermissionIds([ResourceType.DOCTOR], [PermissionAction.READ])
+      ),
+    },
+  ];
+
+  // Create roles with permissions
+  for (const roleData of rolesData) {
+    const { permissionIds, ...roleInfo } = roleData;
+
+    const role = await prisma.role.upsert({
+      where: { name: roleData.name },
+      update: {},
+      create: roleInfo,
+    });
+
+    // Assign permissions to role
+    await Promise.all(
+      permissionIds.map(async (permissionId) => {
+        await prisma.rolePermission.upsert({
+          where: {
+            roleId_permissionId: {
+              roleId: role.id,
+              permissionId,
+            },
+          },
+          update: {},
+          create: {
+            roleId: role.id,
+            permissionId,
+          },
+        });
+      })
+    );
+
+    console.log(`✅ Created role: ${role.name} with ${permissionIds.length} permissions`);
+  }
+
   console.log('✅ Database seeding completed successfully!');
   console.log('📊 Created:');
   console.log(`  - 4 Users (Admin, Doctor, Nurse, Receptionist)`);
@@ -1196,6 +1395,8 @@ async function main() {
   console.log(`  - 6 Medical Documents`);
   console.log(`  - 4 Medical Reports`);
   console.log(`  - 2 Report Templates`);
+  console.log(`  - ${permissions.length} Permissions`);
+  console.log(`  - 4 Roles (Admin, Doctor, Nurse, Receptionist)`);
   console.log('🔐 Demo login credentials:');
   console.log('  - Admin: admin@medicore.com / password123');
   console.log('  - Doctor: dr.mohammed.ali@medicore.com / password123');

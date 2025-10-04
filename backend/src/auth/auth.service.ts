@@ -240,4 +240,75 @@ export class AuthService {
   async comparePasswords(password: string, hash: string): Promise<boolean> {
     return bcrypt.compare(password, hash);
   }
+
+  async registerUser(data: {
+    email: string;
+    password: string;
+    fullName: string;
+    role: string;
+    phone?: string;
+    department?: string;
+    employeeId?: string;
+  }) {
+    // Check if user already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: data.email },
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('User with this email already exists');
+    }
+
+    // Hash password
+    const passwordHash = await this.hashPassword(data.password);
+
+    // Create user
+    const user = await this.prisma.user.create({
+      data: {
+        email: data.email,
+        passwordHash,
+        fullName: data.fullName,
+        role: data.role,
+        phone: data.phone,
+        department: data.department,
+        employeeId: data.employeeId,
+        status: 'active', // User is active immediately
+      },
+    });
+
+    // Get role from database to assign permissions
+    const roleRecord = await this.prisma.role.findFirst({
+      where: {
+        name: {
+          equals: data.role.charAt(0).toUpperCase() + data.role.slice(1), // Capitalize first letter (admin -> Admin)
+          mode: 'insensitive',
+        },
+      },
+    });
+
+    // Assign role to user automatically
+    if (roleRecord) {
+      await this.prisma.userRole_New.create({
+        data: {
+          userId: user.id,
+          roleId: roleRecord.id,
+        },
+      });
+    }
+
+    // Log the user creation
+    await this.auditService.logAuthSuccess(
+      user.email,
+      'system',
+      `User registered with role: ${data.role}`,
+    );
+
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      status: user.status,
+    };
+  }
 }

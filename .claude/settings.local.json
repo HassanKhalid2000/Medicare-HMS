@@ -63,7 +63,12 @@
       "Bash(open http://localhost:3000/laboratory)",
       "Bash(open http://localhost:3000/pharmacy)",
       "Bash(open http://localhost:3000/medical-reports)",
-      "Read(//private/tmp/**)"
+      "Read(//private/tmp/**)",
+      "Bash(git diff:*)",
+      "Bash(open http://localhost:3000/settings)",
+      "Read(//Users/hassankhalid/.npm/_logs/**)",
+      "Bash(open http://localhost:3000/permissions)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []

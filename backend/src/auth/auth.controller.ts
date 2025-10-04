@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { RegisterUserDto } from './dto/register-user.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 
@@ -119,5 +120,34 @@ export class AuthController {
       valid: true,
       user: req.user,
     };
+  }
+
+  @Post('register')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Register new user (Admin only)' })
+  @ApiResponse({
+    status: 201,
+    description: 'User registered successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        email: { type: 'string' },
+        fullName: { type: 'string' },
+        role: { type: 'string' },
+        status: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'User already exists' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin only' })
+  async register(@Request() req, @Body() registerDto: RegisterUserDto) {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      throw new UnauthorizedException('Only administrators can register new users');
+    }
+
+    return this.authService.registerUser(registerDto);
   }
 }

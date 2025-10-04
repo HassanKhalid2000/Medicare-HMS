@@ -16,7 +16,8 @@ import {
   ClipboardList,
   Stethoscope,
   TestTube,
-  Package
+  Package,
+  Shield
 } from 'lucide-react';
 
 import {
@@ -122,6 +123,12 @@ const navigation = {
     }
   ],
   settings: [
+    {
+      title: 'Permissions',
+      url: '/permissions',
+      icon: Shield,
+      roles: ['admin']
+    },
     {
       title: 'Settings',
       url: '/settings',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -12,27 +12,38 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { User, Building2, Palette, Bell, Save } from 'lucide-react';
+import { settingsService } from '@/services/settings';
+import { useSession } from 'next-auth/react';
 
 export default function SettingsPage() {
+  const { data: session } = useSession();
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Profile Settings
   const [profileSettings, setProfileSettings] = useState({
-    fullName: 'Admin User',
-    email: 'admin@medicore.com',
-    phone: '+1 234 567 8900',
-    role: 'admin',
-    bio: 'Hospital Administrator',
+    fullName: '',
+    email: '',
+    phone: '',
+    role: '',
+    bio: '',
+  });
+
+  // Password
+  const [passwordSettings, setPasswordSettings] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
   });
 
   // Hospital Settings
   const [hospitalSettings, setHospitalSettings] = useState({
-    name: 'MediCore Hospital',
-    address: '123 Healthcare Avenue, Medical City, MC 12345',
-    phone: '(555) 123-4567',
-    email: 'info@medicore.com',
-    website: 'www.medicore.com',
-    registrationNumber: 'HOS-2024-001',
+    name: '',
+    address: '',
+    phone: '',
+    email: '',
+    website: '',
+    registrationNumber: '',
   });
 
   // Appearance Settings
@@ -52,14 +63,82 @@ export default function SettingsPage() {
     systemUpdates: false,
   });
 
+  // Load settings on mount
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      setIsLoading(true);
+      const response = await settingsService.getAllSettings();
+
+      if (response.data.profile) {
+        setProfileSettings(prev => ({ ...prev, ...response.data.profile }));
+      }
+      if (response.data.hospital) {
+        setHospitalSettings(prev => ({ ...prev, ...response.data.hospital }));
+      }
+      if (response.data.appearance) {
+        setAppearanceSettings(prev => ({ ...prev, ...response.data.appearance }));
+      }
+      if (response.data.notification) {
+        setNotificationSettings(prev => ({ ...prev, ...response.data.notification }));
+      }
+
+      // Set from session if available
+      if (session?.user) {
+        setProfileSettings(prev => ({
+          ...prev,
+          fullName: session.user.fullName || prev.fullName,
+          email: session.user.email || prev.email,
+          role: session.user.role || prev.role,
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
     setIsSaving(true);
     try {
-      // API call would go here
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await settingsService.updateProfileSettings({
+        fullName: profileSettings.fullName,
+        phone: profileSettings.phone,
+        bio: profileSettings.bio,
+      });
       toast.success('Profile settings saved successfully');
-    } catch (error) {
-      toast.error('Failed to save profile settings');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to save profile settings');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (passwordSettings.newPassword !== passwordSettings.confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    if (passwordSettings.newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await settingsService.changePassword(
+        passwordSettings.currentPassword,
+        passwordSettings.newPassword
+      );
+      toast.success('Password changed successfully');
+      setPasswordSettings({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to change password');
     } finally {
       setIsSaving(false);
     }
@@ -68,11 +147,10 @@ export default function SettingsPage() {
   const handleSaveHospital = async () => {
     setIsSaving(true);
     try {
-      // API call would go here
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await settingsService.updateHospitalSettings(hospitalSettings);
       toast.success('Hospital settings saved successfully');
-    } catch (error) {
-      toast.error('Failed to save hospital settings');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to save hospital settings');
     } finally {
       setIsSaving(false);
     }
@@ -81,11 +159,10 @@ export default function SettingsPage() {
   const handleSaveAppearance = async () => {
     setIsSaving(true);
     try {
-      // API call would go here
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await settingsService.updateAppearanceSettings(appearanceSettings);
       toast.success('Appearance settings saved successfully');
-    } catch (error) {
-      toast.error('Failed to save appearance settings');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to save appearance settings');
     } finally {
       setIsSaving(false);
     }
@@ -94,11 +171,10 @@ export default function SettingsPage() {
   const handleSaveNotifications = async () => {
     setIsSaving(true);
     try {
-      // API call would go here
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await settingsService.updateNotificationSettings(notificationSettings);
       toast.success('Notification settings saved successfully');
-    } catch (error) {
-      toast.error('Failed to save notification settings');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to save notification settings');
     } finally {
       setIsSaving(false);
     }
@@ -190,22 +266,43 @@ export default function SettingsPage() {
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="currentPassword">Current Password</Label>
-                    <Input id="currentPassword" type="password" />
+                    <Input
+                      id="currentPassword"
+                      type="password"
+                      value={passwordSettings.currentPassword}
+                      onChange={(e) => setPasswordSettings({ ...passwordSettings, currentPassword: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="newPassword">New Password</Label>
-                    <Input id="newPassword" type="password" />
+                    <Input
+                      id="newPassword"
+                      type="password"
+                      value={passwordSettings.newPassword}
+                      onChange={(e) => setPasswordSettings({ ...passwordSettings, newPassword: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="confirmPassword">Confirm Password</Label>
-                    <Input id="confirmPassword" type="password" />
+                    <Input
+                      id="confirmPassword"
+                      type="password"
+                      value={passwordSettings.confirmPassword}
+                      onChange={(e) => setPasswordSettings({ ...passwordSettings, confirmPassword: e.target.value })}
+                    />
                   </div>
                 </div>
+                <div className="flex justify-end">
+                  <Button onClick={handleChangePassword} disabled={isSaving} variant="outline">
+                    Change Password
+                  </Button>
+                </div>
               </div>
+              <Separator />
               <div className="flex justify-end">
                 <Button onClick={handleSaveProfile} disabled={isSaving}>
                   <Save className="h-4 w-4 mr-2" />
-                  {isSaving ? 'Saving...' : 'Save Changes'}
+                  {isSaving ? 'Saving...' : 'Save Profile'}
                 </Button>
               </div>
             </CardContent>

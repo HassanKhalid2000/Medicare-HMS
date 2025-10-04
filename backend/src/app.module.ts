@@ -18,6 +18,8 @@ import { LaboratoryModule } from './modules/laboratory/laboratory.module';
 import { AdmissionsModule } from './modules/admissions/admissions.module';
 import { MedicalReportsModule } from './modules/medical-reports/medical-reports.module';
 import { PharmacyModule } from './modules/pharmacy/pharmacy.module';
+import { SettingsModule } from './modules/settings/settings.module';
+import { PermissionsModule } from './modules/permissions/permissions.module';
 
 @Module({
   imports: [
@@ -49,6 +51,8 @@ import { PharmacyModule } from './modules/pharmacy/pharmacy.module';
     PharmacyModule,
     AdmissionsModule,
     MedicalReportsModule,
+    SettingsModule,
+    PermissionsModule,
   ],
 })
 export class AppModule {}

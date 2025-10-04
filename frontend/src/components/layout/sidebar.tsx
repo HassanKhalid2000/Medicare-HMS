@@ -13,6 +13,7 @@ import {
   FileText,
   Pill,
   FlaskConical,
+  Shield,
   Settings,
   LogOut
 } from 'lucide-react';
@@ -77,6 +78,12 @@ const navigation = [
     href: '/laboratory',
     icon: FlaskConical,
     roles: ['admin', 'doctor', 'nurse']
+  },
+  {
+    name: 'Permissions',
+    href: '/permissions',
+    icon: Shield,
+    roles: ['admin']
   }
 ];
 
