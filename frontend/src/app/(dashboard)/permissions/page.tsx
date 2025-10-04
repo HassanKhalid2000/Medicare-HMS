@@ -645,7 +645,14 @@ function CreateUserTab({ roles, onRefresh }: { roles: Role[]; onRefresh: () => v
 
     try {
       setLoading(true);
-      await registerUser(formData);
+      // Filter out empty optional fields
+      const dataToSend = {
+        ...formData,
+        phone: formData.phone || undefined,
+        department: formData.department || undefined,
+        employeeId: formData.employeeId || undefined,
+      };
+      await registerUser(dataToSend);
       toast.success('User created successfully with role permissions');
 
       // Reset form
